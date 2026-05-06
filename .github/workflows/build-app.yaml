@@ -18,11 +18,11 @@ jobs:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java 17
+      - name: 2. Setup Java 21 (تم التحديث للحل)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21' # تم التغيير من 17 إلى 21 لتوافق Gradle 8.14
 
       - name: 3. Setup Node.js 24
         uses: actions/setup-node@v4
@@ -39,7 +39,6 @@ jobs:
 
       - name: 5. Initialize Android (Fresh Start)
         run: |
-          # التأكد من وجود مجلد الويب لنجاح عملية الإضافة
           mkdir -p www
           npx cap add android
           npx cap sync android
@@ -85,27 +84,23 @@ jobs:
           npm install @capacitor/assets --save-dev --legacy-peer-deps
           npx capacitor-assets generate --android
 
-      - name: 8. Build Android Binaries (Fixed Step)
+      - name: 8. Build Android Binaries
         run: |
           cd android
           chmod +x gradlew
-          # تنظيف أي ملفات مؤقتة لضمان بناء نظيف
+          # إجبار Gradle على استخدام Java 21 المثبت في البيئة
           ./gradlew clean
-          # تشغيل البناء مع تعطيل الـ Daemon لتوفير الذاكرة ومنع التوقف المفاجئ
-          ./gradlew assembleRelease --no-daemon
-          ./gradlew bundleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon -Dorg.gradle.java.home=$JAVA_HOME
+          ./gradlew bundleRelease --no-daemon -Dorg.gradle.java.home=$JAVA_HOME
 
-      - name: 9. Sign APK & AAB (Mamoul Credentials)
+      - name: 9. Sign APK & AAB
         run: |
-          # إزالة أي مفتاح قديم لتجنب تعارض الملفات
           rm -f mamoul.jks
           keytool -genkey -v -keystore mamoul.jks -alias mamoul_alias -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
             -dname "CN=MamoulApp, OU=Production, O=Mamoul, L=Cairo, C=EG"
           
-          # البحث التلقائي عن أداة apksigner لضمان التوافق مع إصدارات الـ Build Tools
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -r | head -n 1)
-          
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
           $APKSIGNER sign --ks mamoul.jks \
             --ks-pass pass:"mamoul_pass_2026" --out Mamoul-Final.apk "$APK_PATH"
