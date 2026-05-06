@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+// استيراد CapacitorHttp للتعامل مع الاتصال الخارجي
+import { CapacitorHttp } from '@capacitor/core';
 
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
@@ -18,6 +20,25 @@ import './App.css';
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
+
+  // --- دالة المزامنة الخارجية (API Sync) ---
+  const syncWithCloud = async (collectionName, data) => {
+    try {
+      const options = {
+        url: 'https://maamoul-pro.vercel.app/api/sync',
+        headers: { 'Content-Type': 'application/json' },
+        data: {
+          collection: collectionName,
+          payload: data
+        },
+      };
+      // استخدام CapacitorHttp.post لإرسال البيانات
+      await CapacitorHttp.post(options);
+      console.log(`تمت مزامنة ${collectionName} مع السحابة بنجاح`);
+    } catch (error) {
+      console.error("خطأ في المزامنة الخارجية:", error);
+    }
+  };
 
   const loadSavedData = (key, initialValue) => {
     try {
@@ -42,7 +63,11 @@ const App = () => {
 
   useEffect(() => {
     const keys = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
-    Object.entries(keys).forEach(([key, val]) => localStorage.setItem(key, JSON.stringify(val)));
+    Object.entries(keys).forEach(([key, val]) => {
+      localStorage.setItem(key, JSON.stringify(val));
+      // مزامنة كل قسم عند حدوث تغيير فيه
+      syncWithCloud(key, val);
+    });
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
 
   const financialStats = useMemo(() => {
