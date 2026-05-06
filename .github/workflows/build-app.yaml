@@ -1,0 +1,121 @@
+name: "Mamoul Production Build"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: 1. Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 4. Deep Clean & Install
+        run: |
+          rm -rf node_modules package-lock.json android ios dist_web
+          npm install --legacy-peer-deps
+          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
+          npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
+          npm run build
+
+      - name: 5. Initialize Android (Fresh Start)
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: 6. Inject Firebase & App Identity (Mamoul)
+        shell: bash
+        run: |
+          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.mamoul.app)
+          cat <<EOF > android/app/google-services.json
+          {
+            "project_info": {
+              "project_number": "162488255991",
+              "project_id": "mamoul-app",
+              "storage_bucket": "mamoul-app.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2",
+                  "android_client_info": { "package_name": "com.mamoul.app" }
+                },
+                "api_key": [ { "current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ" } ],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+
+          STRINGS="android/app/src/main/res/values/strings.xml"
+          APP_GRADLE="android/app/build.gradle"
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          
+          # تعديل اسم التطبيق إلى "معمول" والحزمة إلى com.mamoul.app
+          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">معمول<\/string>/' $STRINGS
+          sed -i 's/namespace ".*"/namespace "com.mamoul.app"/' $APP_GRADLE
+          sed -i 's/applicationId ".*"/applicationId "com.mamoul.app"/' $APP_GRADLE
+          
+          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
+
+      - name: 7. Generate App Icons & Splash
+        run: |
+          mkdir -p assets
+          # التأكد من وجود أيقونات التطبيق
+          [ -f "icon-only.png" ] && cp icon-only.png assets/icon-only.png || echo "No icon found"
+          npx capacitor-assets generate --android
+
+      - name: 8. Build Android Binaries
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+          ./gradlew bundleRelease
+
+      - name: 9. Sign APK & AAB (Mamoul Credentials)
+        run: |
+          # توليد مفتاح توقيع جديد باسم معمول
+          keytool -genkey -v -keystore mamoul.jks -alias mamoul_alias -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
+            -dname "CN=MamoulApp, OU=Production, O=Mamoul, L=Cairo, C=EG"
+          
+          APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks mamoul.jks \
+            --ks-pass pass:"mamoul_pass_2026" --out Mamoul-Final.apk "$APK_PATH"
+          
+          AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
+          jarsigner -keystore mamoul.jks -storepass "mamoul_pass_2026" "$AAB_PATH" mamoul_alias
+          cp "$AAB_PATH" Mamoul-Final.aab
+
+      - name: 10. Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "Mamoul Build v${{ github.run_number }}"
+          files: |
+            Mamoul-Final.apk
+            Mamoul-Final.aab
+            mamoul.jks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
