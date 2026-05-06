@@ -1,4 +1,5 @@
-import clientPromise from "../lib/mongodb";
+// التعديل الأساسي: إضافة .js لنهاية المسار لضمان عمل الاستيراد في بيئة Vercel
+import clientPromise from "../lib/mongodb.js";
 
 export default async function handler(request, response) {
     // 1. إعدادات الوصول CORS (للسماح للأندرويد والمتصفح بالاتصال)
@@ -27,7 +28,7 @@ export default async function handler(request, response) {
             return response.status(400).json({ error: 'Missing collectionName or data' });
         }
 
-        // 4. تنفيذ عملية التحديث أو الإضافة (Upsert)
+        // 4. تنفيذ عملية التحديث أو الإضافة (Upsert) باستخدام id البيانات
         const result = await db.collection(collectionName).updateOne(
             { id: data.id }, 
             { 
@@ -48,7 +49,7 @@ export default async function handler(request, response) {
         });
 
     } catch (error) {
-        // طباعة الخطأ في Vercel Logs للتشخيص
+        // طباعة الخطأ بالتفصيل في Vercel Logs للتشخيص
         console.error('Database Sync Error:', error);
         return response.status(500).json({ 
             error: 'Internal Server Error', 
