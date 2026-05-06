@@ -1,47 +1,58 @@
-import clientPromise from "../../lib/mongodb";
+import clientPromise from "../lib/mongodb";
 
-export default async function handler(req, res) {
-  // التحقق من أن الطلب POST فقط
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'الطريقة غير مسموح بها' });
-  }
+export default async function handler(request, response) {
+    // 1. إعدادات الوصول CORS (للسماح للأندرويد والمتصفح بالاتصال)
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  try {
-    const client = await clientPromise;
-    // استخراج اسم قاعدة البيانات من الرابط أو استخدام اسم افتراضي
-    const db = client.db("maamoul_db"); 
-    
-    const { collectionName, data } = req.body;
-
-    if (!collectionName || !data) {
-      return res.status(400).json({ message: 'بيانات القسم أو المحتوى ناقصة' });
+    // التعامل مع طلبات Preflight (OPTIONS)
+    if (request.method === 'OPTIONS') {
+        return response.status(200).end();
     }
 
-    // "المعادلة الذكية": تحديث البيانات إذا كانت موجودة (Upsert)
-    // نستخدم id المنتج أو المادة الخام كمفتاح للمطابقة
-    const result = await db.collection(collectionName).updateOne(
-      { id: data.id }, 
-      { 
-        $set: { 
-          ...data, 
-          last_sync: new Date(),
-          source: 'mobile_app' 
-        } 
-      },
-      { upsert: true }
-    );
+    // 2. التحقق من طريقة الطلب (نحتاج POST للمزامنة)
+    if (request.method !== 'POST') {
+        return response.status(405).json({ error: 'Method Not Allowed' });
+    }
 
-    return res.status(200).json({ 
-      success: true, 
-      message: "تمت المزامنة بنجاح مع MongoDB",
-      updatedId: data.id 
-    });
+    try {
+        // 3. الاتصال بقاعدة البيانات
+        const client = await clientPromise;
+        const db = client.db("maamoul_db"); // تأكد من اسم قاعدة بياناتك
+        
+        const { collectionName, data } = request.body;
 
-  } catch (e) {
-    console.error("MongoDB Sync Error:", e);
-    return res.status(500).json({ 
-      message: "فشل الاتصال بـ MongoDB", 
-      error: e.message 
-    });
-  }
+        if (!collectionName || !data) {
+            return response.status(400).json({ error: 'Missing collectionName or data' });
+        }
+
+        // 4. تنفيذ عملية التحديث أو الإضافة (Upsert)
+        const result = await db.collection(collectionName).updateOne(
+            { id: data.id }, 
+            { 
+                $set: { 
+                    ...data, 
+                    updatedAt: new Date(),
+                    sync_source: 'vercel_api'
+                } 
+            },
+            { upsert: true }
+        );
+
+        // 5. إرسال استجابة النجاح
+        return response.status(200).json({ 
+            success: true, 
+            message: 'Synced successfully with MongoDB',
+            result 
+        });
+
+    } catch (error) {
+        // طباعة الخطأ في Vercel Logs للتشخيص
+        console.error('Database Sync Error:', error);
+        return response.status(500).json({ 
+            error: 'Internal Server Error', 
+            details: error.message 
+        });
+    }
 }
