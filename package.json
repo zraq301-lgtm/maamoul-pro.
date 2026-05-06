@@ -44,8 +44,5 @@
     "tailwindcss": "^3.4.1",
     "vite": "^5.0.0",
     "terser": "^5.27.0"
-  },
-  "overrides": {
-    "org.bouncycastle:bcprov-jdk18on": "1.78.1"
   }
 }
