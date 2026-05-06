@@ -32,20 +32,26 @@ jobs:
       - name: 4. Deep Clean & Install
         run: |
           rm -rf node_modules package-lock.json android ios dist_web
+          # تثبيت الحزم الأساسية أولاً
           npm install --legacy-peer-deps
-          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
+          # تثبيت CLI الخاص بكاباسيتور لضمان وجود npx cap
+          npm install @capacitor/cli @capacitor/core @capacitor/android --save-dev --legacy-peer-deps
+          # تثبيت مكتبات الإشعارات والـ SQLite
           npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
           npm run build
 
       - name: 5. Initialize Android (Fresh Start)
         run: |
+          # التأكد من وجود مجلد البناء قبل الإضافة
+          mkdir -p www 
+          # استخدام npx لتشغيل كاباسيتور
           npx cap add android
           npx cap sync android
 
       - name: 6. Inject Firebase & App Identity (Mamoul)
         shell: bash
         run: |
-          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.mamoul.app)
+          # حقن ملف جوجل
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -71,19 +77,20 @@ jobs:
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # تعديل اسم التطبيق إلى "معمول" والحزمة إلى com.mamoul.app
+          # تعديل اسم التطبيق والحزمة
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">معمول<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.mamoul.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.mamoul.app"/' $APP_GRADLE
           
-          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
+          # إضافة الأذونات
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
         run: |
           mkdir -p assets
-          # التأكد من وجود أيقونات التطبيق
           [ -f "icon-only.png" ] && cp icon-only.png assets/icon-only.png || echo "No icon found"
+          # تثبيت أداة الأصول محلياً لضمان التشغيل
+          npm install @capacitor/assets --save-dev --legacy-peer-deps
           npx capacitor-assets generate --android
 
       - name: 8. Build Android Binaries
@@ -95,13 +102,13 @@ jobs:
 
       - name: 9. Sign APK & AAB (Mamoul Credentials)
         run: |
-          # توليد مفتاح توقيع جديد باسم معمول
           keytool -genkey -v -keystore mamoul.jks -alias mamoul_alias -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
             -dname "CN=MamoulApp, OU=Production, O=Mamoul, L=Cairo, C=EG"
           
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks mamoul.jks \
+          # استخدام apksigner من المسار الافتراضي للـ SDK في GitHub Actions
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks mamoul.jks \
             --ks-pass pass:"mamoul_pass_2026" --out Mamoul-Final.apk "$APK_PATH"
           
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
