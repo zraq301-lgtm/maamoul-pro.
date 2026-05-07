@@ -41,6 +41,20 @@ const App = () => {
     }
   };
 
+  // --- دالة الحذف المستقلة من السحاب ---
+  const deleteFromServer = async (collectionName, id) => {
+    try {
+      const options = {
+        url: 'https://maamoul-pro-five.vercel.app/api/delete-item',
+        params: { collectionName, id: id.toString() }
+      };
+      await CapacitorHttp.delete(options);
+      console.log(`🗑️ تم الحذف من سحاب [${collectionName}]`);
+    } catch (error) {
+      console.error("❌ خطأ أثناء الحذف من السحاب:", error);
+    }
+  };
+
   // --- دالة جلب البيانات مع المقارنة لضمان الاستقرار ---
   const fetchFromCloud = async (collectionName, currentLocalData, setter) => {
     try {
@@ -54,8 +68,6 @@ const App = () => {
       if (response.data && response.data.success && response.data.data) {
         const cloudData = response.data.data;
 
-        // منطق المقارنة: لا نحدث الحالة إلا إذا كانت بيانات السحاب مختلفة أو أكثر عدداً
-        // هذا يحمي البيانات المحلية من المسح في حال كان السحاب فارغاً أو قديماً
         if (JSON.stringify(cloudData) !== JSON.stringify(currentLocalData)) {
             if (cloudData.length >= currentLocalData.length) {
                 setter(cloudData);
@@ -91,7 +103,6 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadSavedData('cashBook', []));
   const [staff, setStaff] = useState(() => loadSavedData('staff', []));
 
-  // جلب البيانات عند فتح التطبيق مع المقارنة بالموجود محلياً
   useEffect(() => {
     fetchFromCloud('stock', stock, setStock);
     fetchFromCloud('salesData', salesData, setSalesData);
@@ -106,7 +117,6 @@ const App = () => {
     fetchFromCloud('staff', staff, setStaff);
   }, []);
 
-  // المزامنة التلقائية عند تغيير البيانات
   useEffect(() => {
     const keys = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
     Object.entries(keys).forEach(([key, val]) => {
@@ -181,7 +191,12 @@ const App = () => {
 
   const handleAddStaff = (employee) => setStaff(prev => [...prev, employee]);
   const handleUpdateStaff = (id, updatedData) => setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
-  const handleDeleteStaff = (id) => setStaff(prev => prev.filter(s => s.id !== id));
+  
+  // تحديث دالة الحذف لتشمل السيرفر
+  const handleDeleteStaff = (id) => {
+    setStaff(prev => prev.filter(s => s.id !== id));
+    deleteFromServer('staff', id);
+  };
 
   const goHome = () => setActivePage('dashboard');
 
