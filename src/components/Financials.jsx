@@ -1,7 +1,7 @@
 import React from 'react';
-import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet } from 'lucide-react';
+import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet, FileSpreadsheet, PlusCircle, Trash2 } from 'lucide-react';
 
-const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
+const Financials = ({ onBack, stats = {}, cashBook = [], onExportExcel, onAddStatement, onDeleteStatement }) => {
   const s = stats;
   const netProfit = s.netProfit || 0;
   const statItems = [
@@ -16,6 +16,29 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
       <div className="page-header"><BarChart3 size={28} color="#16a085" /><h2>القوائم المالية</h2></div>
+
+      {/* أزرار الإجراءات الجديدة */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
+        <button 
+          onClick={onExportExcel}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#1d6f42', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
+        >
+          <FileSpreadsheet size={20} /> فتح Excel
+        </button>
+        <button 
+          onClick={onAddStatement}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#3498db', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
+        >
+          <PlusCircle size={20} /> إضافة قائمة
+        </button>
+        <button 
+          onClick={onDeleteStatement}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
+        >
+          <Trash2 size={20} /> حذف قائمة
+        </button>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
         {statItems.map((item, i) => (
           <div key={i} className="glass-card" style={{ padding: '14px', background: item.bg }}>
@@ -24,10 +47,12 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
           </div>
         ))}
       </div>
+
       <div className="glass-card" style={{ padding: '25px', textAlign: 'center', background: netProfit >= 0 ? 'rgba(220, 252, 231, 0.8)' : 'rgba(254, 226, 226, 0.8)', marginBottom: '15px' }}>
         <div style={{ fontSize: '0.95rem', color: '#475569', marginBottom: '8px' }}>صافي الأرباح</div>
         <div style={{ fontSize: '2rem', fontWeight: '900', color: netProfit >= 0 ? '#166534' : '#991b1b' }}>{netProfit.toLocaleString()} <small style={{ fontSize: '1rem' }}>ج.م</small></div>
       </div>
+
       {cashBook.length > 0 && (
         <div className="glass-card" style={{ marginBottom: '15px' }}>
           <h3 style={{ marginTop: 0, fontSize: '1rem', marginBottom: '12px', color: '#334155' }}>آخر حركات الخزينة</h3>
@@ -39,6 +64,7 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
           ))}
         </div>
       )}
+
       <button onClick={onBack} className="btn-back"><ArrowRight size={18} /> العودة للوحة التحكم</button>
     </div>
   );
