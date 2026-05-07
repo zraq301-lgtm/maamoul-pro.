@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Box, Layers, AlertCircle, ArrowRight, Plus, Trash2, Calendar, Package, Table as TableIcon, LayoutGrid, X, ArrowLeftRight, Edit3 } from 'lucide-react';
+import { Box, Layers, AlertCircle, ArrowRight, Plus, Trash2, Calendar, Package, Table as TableIcon, LayoutGrid, X, FileSpreadsheet } from 'lucide-react';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   const [activeTab, setActiveTab] = useState('raw');
-  const [viewMode, setViewMode] = useState('table'); // افتراضياً وضع الجدول ERP
+  const [viewMode, setViewMode] = useState('table'); 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', balance: '', price: '', unit: 'وحدة' });
 
@@ -21,130 +21,113 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   };
 
   return (
-    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#f8fafc', paddingBottom: '100px' }}>
+    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#fff', paddingBottom: '100px' }}>
       
-      {/* هيدر النظام */}
+      {/* الهيدر العلوي */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ background: '#3498db', padding: '8px', borderRadius: '12px', color: '#fff' }}>
-            <Layers size={24} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button onClick={onBack} style={{ background: '#f1f5f9', border: 'none', padding: '12px', borderRadius: '50%', cursor: 'pointer' }}>
+            <X size={24} color="#000" />
+          </button>
+          <div style={{ textAlign: 'right' }}>
+            <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#000', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              عرض البيانات المجدولة <FileSpreadsheet color="#1e5631" size={28} />
+            </h2>
           </div>
-          <h2 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '900', color: '#1e293b' }}>نظام جرد معمول</h2>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '12px', color: '#3498db', cursor: 'pointer' }}>
+      </div>
+
+      {/* التبديل بين الأقسام */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'raw' ? '#1e5631' : '#f1f5f9', color: activeTab === 'raw' ? '#fff' : '#64748b', fontWeight: 'bold' }}>مواد خام</button>
+        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'finished' ? '#1e5631' : '#f1f5f9', color: activeTab === 'finished' ? '#fff' : '#64748b', fontWeight: 'bold' }}>منتج نهائي</button>
+        <button onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff' }}>
             {viewMode === 'cards' ? <TableIcon size={20} /> : <LayoutGrid size={20} />}
-          </button>
-          <button onClick={onBack} style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '50%', cursor: 'pointer' }}>
-            <ArrowRight size={20} />
-          </button>
+        </button>
+      </div>
+
+      {/* المحتوى الرئيسي */}
+      {viewMode === 'table' ? (
+        /* عرض الإكسل المماثل للصورة */
+        <div style={{ border: '2px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
+            <thead>
+              <tr style={{ background: '#1e5631', color: '#fff' }}>
+                <th style={{ padding: '12px', border: '1px solid #fff' }}>التاريخ</th>
+                <th style={{ padding: '12px', border: '1px solid #fff' }}>البيان</th>
+                <th style={{ padding: '12px', border: '1px solid #fff' }}>النوع</th>
+                <th style={{ padding: '12px', border: '1px solid #fff' }}>المبلغ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentDisplay.map((cat, index) => (
+                <tr key={cat.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '12px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
+                    {cat.batches?.[0]?.date || '2026/5/8'}
+                  </td>
+                  <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>{cat.name}</td>
+                  <td style={{ padding: '12px', border: '1px solid #e2e8f0', color: 'red' }}>صادر</td>
+                  <td style={{ padding: '12px', border: '1px solid #e2e8f0', fontWeight: 'bold' }}>
+                    {isNaN(cat.price) ? <span style={{fontSize:'0.8rem'}}>ليس رقم</span> : cat.price * cat.balance}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      ) : (
+        /* العرض العادي (نظام الكروت) */
+        <div style={{ display: 'grid', gap: '20px' }}>
+          {currentDisplay.map(cat => (
+            <div key={cat.id} style={{ background: '#fff', borderRadius: '25px', padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', borderLeft: '6px solid #3498db', position: 'relative' }}>
+               <button onClick={() => onDeleteItem(cat.id)} style={{ position: 'absolute', top: '15px', left: '15px', background: '#fee2e2', border: 'none', padding: '8px', borderRadius: '10px', color: '#ef4444' }}><Trash2 size={18} /></button>
+               <h3 style={{ margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.4rem' }}>
+                  <Box color="#3498db" /> {cat.name}
+               </h3>
+               <div style={{ display: 'flex', gap: '15px' }}>
+                  <div style={{ flex: 1, background: '#f8fafc', padding: '15px', borderRadius: '15px', textAlign: 'center' }}>
+                     <div style={{ color: '#64748b', fontSize: '0.8rem' }}>الرصيد</div>
+                     <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cat.balance} {cat.unit}</div>
+                  </div>
+                  <div style={{ flex: 1, background: '#f8fafc', padding: '15px', borderRadius: '15px', textAlign: 'center' }}>
+                     <div style={{ color: '#64748b', fontSize: '0.8rem' }}>السعر (متوسط)</div>
+                     <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cat.price} ج.م</div>
+                  </div>
+               </div>
+               {/* سجل الشحنات المجدولة */}
+               <div style={{ marginTop: '15px', padding: '12px', background: '#eff6ff', borderRadius: '12px', border: '1px dashed #3b82f6' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e40af', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                     <Package size={16} /> سجل الشحنات (ERP):
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                     <span>📅 {cat.batches?.[0]?.date || '2026-05-07'}</span>
+                     <span>الكمية: {cat.balance}</span>
+                     <span>التكلفة: {cat.price}</span>
+                  </div>
+               </div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* تبويبات الأقسام */}
-      <div style={{ display: 'flex', gap: '8px', background: '#f1f5f9', padding: '5px', borderRadius: '16px', marginBottom: '20px' }}>
-        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'raw' ? '#3498db' : 'transparent', color: activeTab === 'raw' ? '#fff' : '#64748b', fontWeight: 'bold', transition: '0.3s' }}>مواد خام</button>
-        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'finished' ? '#e67e22' : 'transparent', color: activeTab === 'finished' ? '#fff' : '#64748b', fontWeight: 'bold', transition: '0.3s' }}>منتج نهائي</button>
-      </div>
-
-      <button onClick={() => setShowAddModal(true)} style={{ width: '100%', padding: '15px', borderRadius: '16px', border: '2px dashed #cbd5e1', background: '#fff', color: '#475569', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '20px' }}>
-        <Plus size={20} /> إضافة سجل جديد للمخزن
+      {/* زر الإضافة العائم */}
+      <button onClick={() => setShowAddModal(true)} style={{ position: 'fixed', bottom: '100px', right: '20px', background: '#1e5631', color: '#fff', border: 'none', width: '60px', height: '60px', borderRadius: '50%', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Plus size={30} />
       </button>
 
-      {/* عرض البيانات بنظام Excel ERP */}
-      <div style={{ background: '#fff', borderRadius: '20px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-        {viewMode === 'table' ? (
-          <div style={{ overflowX: 'auto' }}> {/* للسماح بالتحرك داخل الجدول على الموبايل */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', minWidth: '600px' }}>
-              <thead>
-                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                  <th style={{ padding: '15px', color: '#64748b', fontSize: '0.85rem' }}>الصنف</th>
-                  <th style={{ padding: '15px', color: '#64748b', fontSize: '0.85rem' }}>الرصيد الحالي</th>
-                  <th style={{ padding: '15px', color: '#64748b', fontSize: '0.85rem' }}>التكلفة (ج.م)</th>
-                  <th style={{ padding: '15px', color: '#64748b', fontSize: '0.85rem' }}>آخر حركة</th>
-                  <th style={{ padding: '15px', color: '#64748b', fontSize: '0.85rem' }}>عمليات ERP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentDisplay.map((cat, index) => (
-                  <tr key={cat.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: index % 2 === 0 ? '#fff' : '#fcfdfe' }}>
-                    <td style={{ padding: '15px', fontWeight: 'bold', color: '#1e293b' }}>{cat.name}</td>
-                    <td style={{ padding: '15px' }}>
-                      <span style={{ padding: '4px 8px', borderRadius: '8px', background: cat.balance < 5 ? '#fee2e2' : '#f1f5f9', color: cat.balance < 5 ? '#ef4444' : '#1e293b', fontWeight: 'bold' }}>
-                        {cat.balance} {cat.unit}
-                      </span>
-                    </td>
-                    <td style={{ padding: '15px', color: '#059669', fontWeight: 'bold' }}>{cat.price}</td>
-                    <td style={{ padding: '15px', fontSize: '0.75rem', color: '#94a3b8' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={12} /> {cat.batches?.[cat.batches.length - 1]?.date || 'لا يوجد'}
-                      </div>
-                    </td>
-                    <td style={{ padding: '15px' }}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        {/* زر تحويل/ترحيل افتراضي */}
-                        <button title="ترحيل عمليات" style={{ border: 'none', background: '#ecfdf5', color: '#10b981', padding: '6px', borderRadius: '8px', cursor: 'pointer' }}>
-                          <ArrowLeftRight size={16} />
-                        </button>
-                        <button onClick={() => window.confirm('حذف؟') && onDeleteItem(cat.id)} style={{ border: 'none', background: '#fee2e2', color: '#ef4444', padding: '6px', borderRadius: '8px', cursor: 'pointer' }}>
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          /* عرض الكروت المنسق */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '15px', padding: '15px' }}>
-            {currentDisplay.map(cat => (
-              <div key={cat.id} style={{ border: '1px solid #e2e8f0', padding: '15px', borderRadius: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <span style={{ fontWeight: 'bold' }}>{cat.name}</span>
-                  <Package size={18} color="#94a3b8" />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
-                  <span style={{ color: '#64748b' }}>الرصيد: <b>{cat.balance}</b></span>
-                  <span style={{ color: '#059669' }}>السعر: <b>{cat.price} ج.م</b></span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* المودال الاحترافي للإضافة */}
+      {/* مودال الإضافة */}
       {showAddModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: '#fff', width: '100%', maxWidth: '420px', borderRadius: '24px', padding: '30px', position: 'relative' }}>
-            <button onClick={() => setShowAddModal(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: '#f1f5f9', border: 'none', borderRadius: '50%', padding: '8px', cursor: 'pointer' }}><X size={20} /></button>
-            <h3 style={{ textAlign: 'center', marginBottom: '25px', fontSize: '1.2rem', fontWeight: '900' }}>إدخال بيانات مخزنية</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '25px', padding: '25px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0 }}>إضافة صنف</h3>
+              <X onClick={() => setShowAddModal(false)} style={{ cursor: 'pointer' }} />
+            </div>
             <form onSubmit={handleLocalSubmit} style={{ display: 'grid', gap: '15px' }}>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: '#64748b', display: 'block', marginBottom: '5px' }}>اسم المادة / المنتج</label>
-                <input style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} type="text" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} required />
-              </div>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '5px', display: 'block' }}>الكمية</label>
-                  <input style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }} type="number" value={newItem.balance} onChange={(e) => setNewItem({...newItem, balance: e.target.value})} required />
-                </div>
-                <div style={{ width: '100px' }}>
-                  <label style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '5px', display: 'block' }}>الوحدة</label>
-                  <select style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }} value={newItem.unit} onChange={(e) => setNewItem({...newItem, unit: e.target.value})}>
-                    <option value="كيلو">كيلو</option>
-                    <option value="قطعة">قطعة</option>
-                    <option value="جرام">جرام</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label style={{ fontSize: '0.8rem', color: '#64748b', display: 'block', marginBottom: '5px' }}>التكلفة لكل وحدة</label>
-                <input style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }} type="number" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} />
-              </div>
-              <button type="submit" style={{ background: '#3498db', color: '#fff', border: 'none', padding: '16px', borderRadius: '16px', fontWeight: 'bold', marginTop: '10px', fontSize: '1rem' }}>اعتماد وحفظ في الجدول</button>
+              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd' }} type="text" placeholder="اسم الصنف" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} required />
+              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd' }} type="number" placeholder="الكمية" value={newItem.balance} onChange={(e) => setNewItem({...newItem, balance: e.target.value})} required />
+              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd' }} type="number" placeholder="السعر" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} />
+              <button type="submit" style={{ background: '#1e5631', color: '#fff', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: 'bold' }}>حفظ البيانات</button>
             </form>
           </div>
         </div>
