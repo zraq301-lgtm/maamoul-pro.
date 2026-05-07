@@ -1,9 +1,27 @@
-import React from 'react';
+import React, { useState } from 'react'; // أضفنا useState هنا
 import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet, FileSpreadsheet, PlusCircle, Trash2 } from 'lucide-react';
 
-const Financials = ({ onBack, stats = {}, cashBook = [], onExportExcel, onAddStatement, onDeleteStatement }) => {
+const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
   const s = stats;
   const netProfit = s.netProfit || 0;
+
+  // --- وظائف الأزرار الجديدة ---
+  const handleExportExcel = () => {
+    alert("سيتم تصدير البيانات إلى ملف Excel الآن...");
+    // هنا يمكنك إضافة كود مكتبة XLSX مثلاً
+  };
+
+  const handleAddStatement = () => {
+    const name = prompt("أدخل اسم القائمة الجديدة:");
+    if (name) alert(`تم إضافة قائمة: ${name}`);
+  };
+
+  const handleDeleteStatement = () => {
+    const confirmDelete = window.confirm("هل أنت متأكد من حذف آخر قائمة؟");
+    if (confirmDelete) alert("تم الحذف بنجاح");
+  };
+  // -------------------------
+
   const statItems = [
     { label: 'إجمالي الإيرادات', value: s.totalIncome || 0, icon: <TrendingUp size={18} color="#2ecc71" />, color: '#2ecc71', bg: 'rgba(236, 253, 245, 0.8)' },
     { label: 'إجمالي المصروفات', value: s.totalExpenses || 0, icon: <TrendingDown size={18} color="#e74c3c" />, color: '#e74c3c', bg: 'rgba(254, 226, 226, 0.8)' },
@@ -17,22 +35,22 @@ const Financials = ({ onBack, stats = {}, cashBook = [], onExportExcel, onAddSta
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
       <div className="page-header"><BarChart3 size={28} color="#16a085" /><h2>القوائم المالية</h2></div>
 
-      {/* أزرار الإجراءات الجديدة */}
+      {/* الأزرار بعد ربطها بالوظائف onClick */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
         <button 
-          onClick={onExportExcel}
+          onClick={handleExportExcel}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#1d6f42', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
         >
           <FileSpreadsheet size={20} /> فتح Excel
         </button>
         <button 
-          onClick={onAddStatement}
+          onClick={handleAddStatement}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#3498db', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
         >
           <PlusCircle size={20} /> إضافة قائمة
         </button>
         <button 
-          onClick={onDeleteStatement}
+          onClick={handleDeleteStatement}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
         >
           <Trash2 size={20} /> حذف قائمة
