@@ -27,7 +27,7 @@ const App = () => {
 
     try {
       const options = {
-        url: 'https://maamoul-pro.vercel.app/api/sync',
+        url: 'https://maamoul-pro-five.vercel.app/api/sync',
         headers: { 'Content-Type': 'application/json' },
         data: {
           collectionName: collectionName,
@@ -35,24 +35,35 @@ const App = () => {
         },
       };
       await CapacitorHttp.post(options);
-      console.log(`✅ تمت مزامنة ${collectionName} مع السحابة بنجاح`);
+      console.log(`✅ تمت مزامنة ${collectionName} بنجاح`);
     } catch (error) {
       console.error("❌ خطأ في المزامنة الخارجية:", error);
     }
   };
 
-  // --- دالة جلب البيانات من السحابة (استلام البيانات) ---
-  const fetchFromCloud = async (collectionName, setter) => {
+  // --- دالة جلب البيانات مع المقارنة لضمان الاستقرار ---
+  const fetchFromCloud = async (collectionName, currentLocalData, setter) => {
     try {
       const options = {
-        url: `https://maamoul-pro.vercel.app/api/sync?collectionName=${collectionName}`,
-        headers: { 'Content-Type': 'application/json' },
+        url: 'https://maamoul-pro-five.vercel.app/api/get-data',
+        params: { collectionName: collectionName }
       };
+      
       const response = await CapacitorHttp.get(options);
+      
       if (response.data && response.data.success && response.data.data) {
-        // تحديث الحالة بالبيانات المستلمة
-        setter(response.data.data);
-        console.log(`📥 تم جلب بيانات ${collectionName} من السحابة`);
+        const cloudData = response.data.data;
+
+        // منطق المقارنة: لا نحدث الحالة إلا إذا كانت بيانات السحاب مختلفة أو أكثر عدداً
+        // هذا يحمي البيانات المحلية من المسح في حال كان السحاب فارغاً أو قديماً
+        if (JSON.stringify(cloudData) !== JSON.stringify(currentLocalData)) {
+            if (cloudData.length >= currentLocalData.length) {
+                setter(cloudData);
+                console.log(`📥 تحديث القسم [${collectionName}] ببيانات السحاب الأحدث`);
+            } else {
+                console.log(`ℹ️ القسم [${collectionName}] محلياً يحتوي على بيانات أكثر، تم الاحتفاظ بالمحلي`);
+            }
+        }
       }
     } catch (error) {
       console.error(`❌ خطأ في جلب بيانات ${collectionName}:`, error);
@@ -80,19 +91,19 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadSavedData('cashBook', []));
   const [staff, setStaff] = useState(() => loadSavedData('staff', []));
 
-  // جلب البيانات عند فتح التطبيق لأول مرة
+  // جلب البيانات عند فتح التطبيق مع المقارنة بالموجود محلياً
   useEffect(() => {
-    fetchFromCloud('stock', setStock);
-    fetchFromCloud('salesData', setSalesData);
-    fetchFromCloud('inventory', setInventory);
-    fetchFromCloud('expenses', setExpenses);
-    fetchFromCloud('waste', setWaste);
-    fetchFromCloud('suppliers', setSuppliers);
-    fetchFromCloud('customers', setCustomers);
-    fetchFromCloud('productionData', setProductionData);
-    fetchFromCloud('waitingList', setSupplierWaitingList);
-    fetchFromCloud('cashBook', setCashBook);
-    fetchFromCloud('staff', setStaff);
+    fetchFromCloud('stock', stock, setStock);
+    fetchFromCloud('salesData', salesData, setSalesData);
+    fetchFromCloud('inventory', inventory, setInventory);
+    fetchFromCloud('expenses', expenses, setExpenses);
+    fetchFromCloud('waste', waste, setWaste);
+    fetchFromCloud('suppliers', suppliers, setSuppliers);
+    fetchFromCloud('customers', customers, setCustomers);
+    fetchFromCloud('productionData', productionData, setProductionData);
+    fetchFromCloud('waitingList', supplierWaitingList, setSupplierWaitingList);
+    fetchFromCloud('cashBook', cashBook, setCashBook);
+    fetchFromCloud('staff', staff, setStaff);
   }, []);
 
   // المزامنة التلقائية عند تغيير البيانات
