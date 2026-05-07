@@ -1,14 +1,51 @@
-import React, { useState } from 'react'; // أضفنا useState هنا
+import React from 'react';
 import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet, FileSpreadsheet, PlusCircle, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx'; // استيراد مكتبة الاكسل
 
 const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
   const s = stats;
   const netProfit = s.netProfit || 0;
 
-  // --- وظائف الأزرار الجديدة ---
+  // --- وظيفة تصدير البيانات إلى ملف Excel حقيقي ---
   const handleExportExcel = () => {
-    alert("سيتم تصدير البيانات إلى ملف Excel الآن...");
-    // هنا يمكنك إضافة كود مكتبة XLSX مثلاً
+    try {
+      // 1. تجهيز بيانات الملخص المالي
+      const summaryData = [
+        { "البند": "إجمالي الإيرادات", "القيمة": s.totalIncome || 0, "العملة": "ج.م" },
+        { "البند": "إجمالي المصروفات", "القيمة": s.totalExpenses || 0, "العملة": "ج.م" },
+        { "البند": "صافي الأرباح", "القيمة": netProfit, "العملة": "ج.م" },
+        { "البند": "قيمة المخزن", "القيمة": s.stockValue || 0, "العملة": "ج.م" },
+        { "البند": "رصيد الخزينة", "القيمة": s.cashBalance || 0, "العملة": "ج.م" },
+        { "البند": "قيمة الهالك", "القيمة": s.totalWasteValue || 0, "العملة": "ج.م" },
+      ];
+
+      // 2. تجهيز بيانات سجل الخزينة
+      const cashBookData = cashBook.map(entry => ({
+        "التاريخ والوقت": entry.timestamp,
+        "البيان": entry.description || entry.category,
+        "النوع": entry.type === 'in' ? 'وارد' : 'صادر',
+        "المبلغ": entry.amount,
+        "العملة": "ج.م"
+      }));
+
+      // 3. إنشاء كتاب عمل جديد (Workbook)
+      const wb = XLSX.utils.book_new();
+
+      // 4. تحويل البيانات إلى شيتات (Sheets)
+      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+      const wsCashBook = XLSX.utils.json_to_sheet(cashBookData);
+
+      // 5. إضافة الشيتات للكتاب
+      XLSX.utils.book_append_sheet(wb, wsSummary, "الملخص المالي");
+      XLSX.utils.book_append_sheet(wb, wsCashBook, "سجل الخزينة");
+
+      // 6. تحميل الملف فوراً
+      XLSX.writeFile(wb, `التقرير_المالي_${new Date().toLocaleDateString('ar-EG')}.xlsx`);
+      
+    } catch (error) {
+      console.error("خطأ في تصدير الملف:", error);
+      alert("حدث خطأ أثناء محاولة إنشاء ملف Excel");
+    }
   };
 
   const handleAddStatement = () => {
@@ -20,7 +57,6 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
     const confirmDelete = window.confirm("هل أنت متأكد من حذف آخر قائمة؟");
     if (confirmDelete) alert("تم الحذف بنجاح");
   };
-  // -------------------------
 
   const statItems = [
     { label: 'إجمالي الإيرادات', value: s.totalIncome || 0, icon: <TrendingUp size={18} color="#2ecc71" />, color: '#2ecc71', bg: 'rgba(236, 253, 245, 0.8)' },
@@ -35,7 +71,6 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
       <div className="page-header"><BarChart3 size={28} color="#16a085" /><h2>القوائم المالية</h2></div>
 
-      {/* الأزرار بعد ربطها بالوظائف onClick */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
         <button 
           onClick={handleExportExcel}
