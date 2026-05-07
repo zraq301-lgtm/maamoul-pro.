@@ -21,22 +21,25 @@ import './App.css';
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
 
-  // --- دالة المزامنة الخارجية (API Sync) ---
+  // --- دالة المزامنة الخارجية (API Sync) المحدثة لتجنب خطأ 400 ---
   const syncWithCloud = async (collectionName, data) => {
+    // منع إرسال بيانات فارغة
+    if (!data || (Array.isArray(data) && data.length === 0)) return;
+
     try {
       const options = {
         url: 'https://maamoul-pro.vercel.app/api/sync',
         headers: { 'Content-Type': 'application/json' },
         data: {
-          collection: collectionName,
-          payload: data
+          collectionName: collectionName, // تم التعديل هنا لتطابق الـ API
+          data: data                     // تم التعديل هنا لتطابق الـ API
         },
       };
       // استخدام CapacitorHttp.post لإرسال البيانات
       await CapacitorHttp.post(options);
-      console.log(`تمت مزامنة ${collectionName} مع السحابة بنجاح`);
+      console.log(`✅ تمت مزامنة ${collectionName} مع السحابة بنجاح`);
     } catch (error) {
-      console.error("خطأ في المزامنة الخارجية:", error);
+      console.error("❌ خطأ في المزامنة الخارجية:", error);
     }
   };
 
