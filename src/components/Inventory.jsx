@@ -4,10 +4,10 @@ import { Box, Layers, AlertCircle, Tag, ArrowRight, RefreshCcw, Plus, Trash2, Sh
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   const [activeTab, setActiveTab] = useState('raw');
 
-  // تأمين البيانات: التأكد أن categories دائماً مصفوفة لتجنب انهيار التطبيق
+  // تأمين البيانات
   const safeCategories = Array.isArray(categories) ? categories : [];
 
-  // تصفية البيانات
+  // تصفية البيانات (خامات vs منتج نهائي)
   const rawMaterials = safeCategories.filter(cat => 
     cat.name && !cat.name.includes("معمول") && !cat.name.includes("جاهز")
   );
@@ -17,24 +17,26 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
 
   const currentDisplay = activeTab === 'raw' ? rawMaterials : finishedGoods;
 
+  // الحسابات
   const totalItems = currentDisplay.reduce((sum, cat) => sum + (parseFloat(cat.balance) || 0), 0);
   const totalValue = currentDisplay.reduce((sum, cat) => sum + ((parseFloat(cat.balance) || 0) * (parseFloat(cat.price) || 0)), 0);
 
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', paddingBottom: '80px' }}>
       
-      {/* الرأس ونظام التبويبات */}
+      {/* الهيدر */}
       <div style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
              <Layers size={28} color="#3498db" />
              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '800' }}>إدارة المخازن</h2>
           </div>
-          <button onClick={onBack} style={{ background: '#f1f5f9', border: 'none', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}>
+          <button onClick={onBack} style={{ background: '#f1f5f9', border: 'none', padding: '10px', borderRadius: '50%', cursor: 'pointer' }}>
             <ArrowRight size={20} />
           </button>
         </div>
 
+        {/* التبويبات */}
         <div style={{ display: 'flex', gap: '5px', background: '#e2e8f0', padding: '5px', borderRadius: '15px' }}>
           <button 
             onClick={() => setActiveTab('raw')}
@@ -42,10 +44,10 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
               flex: 1, padding: '10px', borderRadius: '12px', border: 'none',
               backgroundColor: activeTab === 'raw' ? '#fff' : 'transparent',
               fontWeight: 'bold', color: activeTab === 'raw' ? '#3498db' : '#64748b',
-              transition: '0.3s', cursor: 'pointer'
+              cursor: 'pointer'
             }}
           >
-            مواد خام
+            مواد خام ({rawMaterials.length})
           </button>
           <button 
             onClick={() => setActiveTab('finished')}
@@ -53,96 +55,89 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
               flex: 1, padding: '10px', borderRadius: '12px', border: 'none',
               backgroundColor: activeTab === 'finished' ? '#fff' : 'transparent',
               fontWeight: 'bold', color: activeTab === 'finished' ? '#e67e22' : '#64748b',
-              transition: '0.3s', cursor: 'pointer'
+              cursor: 'pointer'
             }}
           >
-            منتج نهائي
+            منتج نهائي ({finishedGoods.length})
           </button>
         </div>
       </div>
 
-      {/* ملخص سريع */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' }}>
-        <div className="glass-card" style={{ padding: '14px', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>إجمالي الكمية</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: '800', color: activeTab === 'raw' ? '#3498db' : '#e67e22' }}>
-            {totalItems.toLocaleString()}
-          </div>
-        </div>
-        <div className="glass-card" style={{ padding: '14px', textAlign: 'center' }}>
-          <div style={{ fontSize: '0.75rem', color: '#64748b' }}>قيمة المخزون</div>
-          <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#2ecc71' }}>
-            {totalValue.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
+      {/* زر إضافة صنف - تأكد من تمرير الوظيفة في App.jsx */}
       <button 
-        onClick={onAddItem}
+        onClick={() => {
+            console.log("Adding item..."); // للتأكد من عمل الزر
+            onAddItem && onAddItem();
+        }}
         style={{ 
-          width: '100%', padding: '12px', borderRadius: '15px', border: '2px dashed #cbd5e1',
-          background: 'rgba(255,255,255,0.5)', color: '#475569', fontWeight: 'bold',
+          width: '100%', padding: '15px', borderRadius: '15px', border: '2px dashed #3498db',
+          background: 'rgba(52, 152, 219, 0.05)', color: '#3498db', fontWeight: 'bold',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
           marginBottom: '20px', cursor: 'pointer'
         }}
       >
-        <Plus size={18} /> إضافة صنف جديد (يدوي)
+        <Plus size={20} /> إضافة صنف جديد للمخزن
       </button>
 
-      {/* عرض القائمة */}
+      {/* عرض العناصر */}
       <div style={{ display: 'grid', gap: '12px' }}>
         {currentDisplay.length === 0 ? (
           <div className="glass-card" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
             <AlertCircle size={40} style={{ marginBottom: '10px', opacity: 0.5, display: 'inline-block' }} />
-            <p>لا توجد بيانات في هذا القسم حالياً.</p>
+            <p>المخزن فارغ حالياً.</p>
           </div>
         ) : currentDisplay.map((cat) => {
           const balance = parseFloat(cat.balance) || 0; 
           const price = parseFloat(cat.price) || 0; 
-          const value = balance * price;
-          const statusColor = balance <= 0 ? '#ef4444' : balance < 10 ? '#f59e0b' : '#3b82f6';
           
           return (
-            <div key={cat.id || Math.random()} className="glass-card" style={{ borderRight: `5px solid ${statusColor}`, padding: '15px' }}>
+            <div key={cat.id} className="glass-card" style={{ padding: '15px', borderRight: `5px solid ${balance < 5 ? '#ef4444' : '#3b82f6'}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {activeTab === 'raw' ? <Box size={20} color="#3498db" /> : <Truck size={20} color="#e67e22" />}
-                  <span style={{ fontWeight: '800', color: '#1e293b', fontSize: '1.1rem' }}>{cat.name || 'صنف بدون اسم'}</span>
+                <div style={{ fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Box size={18} color="#64748b" /> {cat.name}
                 </div>
-                <button onClick={() => onDeleteItem(cat.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                  <Trash2 size={18} />
+                {/* زر الحذف */}
+                <button 
+                  onClick={() => {
+                    if(window.confirm(`هل أنت متأكد من حذف ${cat.name}؟`)) {
+                        onDeleteItem && onDeleteItem(cat.id);
+                    }
+                  }} 
+                  style={{ background: '#fee2e2', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '8px', cursor: 'pointer' }}
+                >
+                  <Trash2 size={16} />
                 </button>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '10px' }}>
+              {/* بيانات الرصيد */}
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ flex: 1, background: '#f8fafc', padding: '10px', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: '#64748b' }}>الرصيد</div>
-                  <div style={{ fontWeight: 'bold', color: statusColor }}>{balance} {cat.unit || 'وحدة'}</div>
+                  <div style={{ fontWeight: '900' }}>{balance} {cat.unit}</div>
                 </div>
-                <div style={{ background: '#f8fafc', padding: '8px', borderRadius: '10px' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>السعر</div>
-                  <div style={{ fontWeight: 'bold' }}>{price.toLocaleString()}</div>
+                <div style={{ flex: 1, background: '#f8fafc', padding: '10px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>السعر (متوسط)</div>
+                  <div style={{ fontWeight: '900' }}>{price} ج.م</div>
                 </div>
               </div>
 
-              {/* التحقق من وجود المصفوفة قبل عمل Map للـ Batches */}
-              {Array.isArray(cat.batches) && cat.batches.length > 0 && (
-                <div style={{ marginTop: '10px', borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', marginBottom: '5px' }}>التشغيلات:</div>
-                  <div style={{ display: 'flex', gap: '5px', overflowX: 'auto' }}>
-                    {cat.batches.map((batch, idx) => (
-                      <div key={idx} style={{ background: '#fff', border: '1px solid #e2e8f0', padding: '4px 8px', borderRadius: '6px', fontSize: '0.65rem' }}>
-                        📦 {batch.quantity || batch.qty} | {batch.price || batch.cost} ج.م
-                      </div>
-                    ))}
-                  </div>
+              {/* نظام الجدولة ERP - عرض الشحنات (Batches) */}
+              {cat.batches && cat.batches.length > 0 ? (
+                <div style={{ marginTop: '10px', background: 'rgba(52, 152, 219, 0.05)', padding: '10px', borderRadius: '10px' }}>
+                   <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#3498db', marginBottom: '5px' }}>📦 سجل الشحنات (ERP):</div>
+                   {cat.batches.map((batch, i) => (
+                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', borderBottom: '1px solid #e2e8f0', padding: '3px 0' }}>
+                        <span>📅 {batch.date || 'قديم'}</span>
+                        <span>الكمية: <b>{batch.qty || batch.quantity}</b></span>
+                        <span>التكلفة: <b>{batch.cost || batch.price}</b></span>
+                     </div>
+                   ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                  لا توجد شحنات مجدولة لهذا الصنف (إدخال يدوي)
                 </div>
               )}
-
-              <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#64748b' }}>القيمة الكلية:</span>
-                <span style={{ fontWeight: '900', color: '#2ecc71' }}>{value.toLocaleString()} ج.م</span>
-              </div>
             </div>
           );
         })}
