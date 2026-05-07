@@ -1,50 +1,56 @@
 import React from 'react';
 import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet, FileSpreadsheet, PlusCircle, Trash2 } from 'lucide-react';
-import * as XLSX from 'xlsx'; // استيراد مكتبة الاكسل
+import * as XLSX from 'xlsx';
+import { Filesystem, Directory } from '@capacitor/filesystem'; // استيراد نظام ملفات الموبايل
 
 const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
   const s = stats;
   const netProfit = s.netProfit || 0;
 
-  // --- وظيفة تصدير البيانات إلى ملف Excel حقيقي ---
-  const handleExportExcel = () => {
+  // --- وظيفة التصدير المعدلة لتعمل على الأندرويد ---
+  const handleExportExcel = async () => {
     try {
-      // 1. تجهيز بيانات الملخص المالي
+      // 1. تجهيز البيانات
       const summaryData = [
-        { "البند": "إجمالي الإيرادات", "القيمة": s.totalIncome || 0, "العملة": "ج.م" },
-        { "البند": "إجمالي المصروفات", "القيمة": s.totalExpenses || 0, "العملة": "ج.م" },
-        { "البند": "صافي الأرباح", "القيمة": netProfit, "العملة": "ج.م" },
-        { "البند": "قيمة المخزن", "القيمة": s.stockValue || 0, "العملة": "ج.م" },
-        { "البند": "رصيد الخزينة", "القيمة": s.cashBalance || 0, "العملة": "ج.م" },
-        { "البند": "قيمة الهالك", "القيمة": s.totalWasteValue || 0, "العملة": "ج.م" },
+        { "البند": "إجمالي الإيرادات", "القيمة": s.totalIncome || 0 },
+        { "البند": "إجمالي المصروفات", "القيمة": s.totalExpenses || 0 },
+        { "البند": "صافي الأرباح", "القيمة": netProfit },
+        { "البند": "قيمة المخزن", "القيمة": s.stockValue || 0 },
+        { "البند": "رصيد الخزينة", "القيمة": s.cashBalance || 0 }
       ];
 
-      // 2. تجهيز بيانات سجل الخزينة
       const cashBookData = cashBook.map(entry => ({
-        "التاريخ والوقت": entry.timestamp,
+        "التاريخ": entry.timestamp,
         "البيان": entry.description || entry.category,
         "النوع": entry.type === 'in' ? 'وارد' : 'صادر',
-        "المبلغ": entry.amount,
-        "العملة": "ج.م"
+        "المبلغ": entry.amount
       }));
 
-      // 3. إنشاء كتاب عمل جديد (Workbook)
+      // 2. إنشاء ملف الإكسل (بصيغة Base64 للموبايل)
       const wb = XLSX.utils.book_new();
-
-      // 4. تحويل البيانات إلى شيتات (Sheets)
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
       const wsCashBook = XLSX.utils.json_to_sheet(cashBookData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, "الملخص");
+      XLSX.utils.book_append_sheet(wb, wsCashBook, "السجل");
 
-      // 5. إضافة الشيتات للكتاب
-      XLSX.utils.book_append_sheet(wb, wsSummary, "الملخص المالي");
-      XLSX.utils.book_append_sheet(wb, wsCashBook, "سجل الخزينة");
+      // تحويل الكتاب إلى Buffer (Base64)
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
 
-      // 6. تحميل الملف فوراً
-      XLSX.writeFile(wb, `التقرير_المالي_${new Date().toLocaleDateString('ar-EG')}.xlsx`);
+      // 3. حفظ الملف في ذاكرة الهاتف (Android)
+      const fileName = `Financial_Report_${Date.now()}.xlsx`;
+      
+      await Filesystem.writeFile({
+        path: fileName,
+        data: wbout,
+        directory: Directory.Documents, // سيتم حفظه في مجلد Documents
+        recursive: true
+      });
+
+      alert(`تم حفظ ملف الإكسل بنجاح في مجلد المستندات باسم: ${fileName}`);
       
     } catch (error) {
-      console.error("خطأ في تصدير الملف:", error);
-      alert("حدث خطأ أثناء محاولة إنشاء ملف Excel");
+      console.error("خطأ في حفظ الملف:", error);
+      alert("تعذر حفظ الملف. تأكد من إعطاء صلاحية الوصول للملفات.");
     }
   };
 
@@ -72,22 +78,13 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
       <div className="page-header"><BarChart3 size={28} color="#16a085" /><h2>القوائم المالية</h2></div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
-        <button 
-          onClick={handleExportExcel}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#1d6f42', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
-        >
-          <FileSpreadsheet size={20} /> فتح Excel
+        <button onClick={handleExportExcel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#1d6f42', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
+          <FileSpreadsheet size={20} /> تصدير Excel
         </button>
-        <button 
-          onClick={handleAddStatement}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#3498db', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
-        >
+        <button onClick={handleAddStatement} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#3498db', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
           <PlusCircle size={20} /> إضافة قائمة
         </button>
-        <button 
-          onClick={handleDeleteStatement}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}
-        >
+        <button onClick={handleDeleteStatement} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
           <Trash2 size={20} /> حذف قائمة
         </button>
       </div>
