@@ -55,7 +55,7 @@ const App = () => {
     }
   };
 
-  // --- دالة جلب البيانات مع المقارنة لضمان الاستقرار ---
+  // --- دالة جلب البيانات ---
   const fetchFromCloud = async (collectionName, currentLocalData, setter) => {
     try {
       const options = {
@@ -73,7 +73,7 @@ const App = () => {
                 setter(cloudData);
                 console.log(`📥 تحديث القسم [${collectionName}] ببيانات السحاب الأحدث`);
             } else {
-                console.log(`ℹ️ القسم [${collectionName}] محلياً يحتوي على بيانات أكثر، تم الاحتفاظ بالمحلي`);
+                console.log(`ℹ️ القسم [${collectionName}] محلياً يحتوي على بيانات أكثر`);
             }
         }
       }
@@ -144,20 +144,38 @@ const App = () => {
     setCashBook(prev => [...prev, { ...entry, id: Date.now(), timestamp: new Date().toLocaleString() }]);
   };
 
+  // --- تعديل هام لدعم الجدولة (Batches) في المخزن ---
   const handleSavePurchase = (newPurchase) => {
     const total = parseFloat(newPurchase.total || (newPurchase.quantity * newPurchase.price) || 0);
     setInventory(prev => [...prev, newPurchase]);
+    
     setStock(prevStock => {
-      const existing = prevStock.findIndex(s => s.name === newPurchase.item);
+      const existingIdx = prevStock.findIndex(s => s.name === newPurchase.item);
       const qty = parseFloat(newPurchase.quantity || 0);
       const price = parseFloat(newPurchase.price || 0);
-      if (existing > -1) {
+      const newBatch = { date: newPurchase.date, qty: qty, cost: price };
+
+      if (existingIdx > -1) {
         const updated = [...prevStock];
-        updated[existing] = { ...updated[existing], balance: (updated[existing].balance || 0) + qty, price: price || updated[existing].price };
+        const item = updated[existingIdx];
+        updated[existingIdx] = { 
+          ...item, 
+          balance: (item.balance || 0) + qty, 
+          price: price, // تحديث السعر لآخر سعر شراء
+          batches: [...(item.batches || []), newBatch] // إضافة الجدول/الشحنة
+        };
         return updated;
       }
-      return [...prevStock, { id: Date.now(), name: newPurchase.item, balance: qty, price, unit: newPurchase.unit || 'وحدة' }];
+      return [...prevStock, { 
+        id: Date.now(), 
+        name: newPurchase.item, 
+        balance: qty, 
+        price, 
+        unit: newPurchase.unit || 'وحدة',
+        batches: [newBatch] // أول جدول/شحنة للصنف الجديد
+      }];
     });
+
     if (newPurchase.paymentMethod === 'كاش') addCashEntry({ type: 'out', category: 'مشتريات', amount: total, description: `شراء: ${newPurchase.item}` });
     else if (newPurchase.paymentMethod === 'آجل' && newPurchase.supplier) setSuppliers(prev => prev.map(s => s.name === newPurchase.supplier ? { ...s, debt: (parseFloat(s.debt) || 0) + total } : s));
     setActivePage('dashboard');
@@ -191,11 +209,15 @@ const App = () => {
 
   const handleAddStaff = (employee) => setStaff(prev => [...prev, employee]);
   const handleUpdateStaff = (id, updatedData) => setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
-  
-  // تحديث دالة الحذف لتشمل السيرفر
   const handleDeleteStaff = (id) => {
     setStaff(prev => prev.filter(s => s.id !== id));
     deleteFromServer('staff', id);
+  };
+
+  // --- دوال التحكم بالمخزن الجديدة ---
+  const handleDeleteStockItem = (id) => {
+    setStock(prev => prev.filter(item => item.id !== id));
+    deleteFromServer('stock', id);
   };
 
   const goHome = () => setActivePage('dashboard');
@@ -206,7 +228,17 @@ const App = () => {
       case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.filter(s => s.status === 'نشط').length} />;
       case 'purchases': return <PurchasesManager {...cp} stock={stock} onPurchaseComplete={handleSavePurchase} onOrderTrigger={handleOrderTrigger} />;
       case 'suppliers': return <Suppliers {...cp} suppliers={suppliers} waitingList={supplierWaitingList} onAddSupplier={handleAddSupplier} onUpdateWaitingList={setSupplierWaitingList} onPayDebt={handlePaySupplierDebt} />;
-      case 'inventory': return <Inventory {...cp} categories={stock} />;
+      
+      // ربط المخزن بالدوال الفعلية
+      case 'inventory': return (
+        <Inventory 
+          {...cp} 
+          categories={stock} 
+          onDeleteItem={handleDeleteStockItem} 
+          onAddItem={() => setActivePage('purchases')} 
+        />
+      );
+
       case 'sales': return <Sales {...cp} onSaveSale={handleSaveSale} customers={customers} stock={stock} />;
       case 'production': return <ProductionManager {...cp} stock={stock} setStock={setStock} onSaveProduction={handleSaveProduction} onSaveWaste={handleSaveWaste} />;
       case 'waste': return <Waste {...cp} inventory={stock} onSaveWaste={handleSaveWaste} />;
