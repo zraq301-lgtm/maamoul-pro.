@@ -21,9 +21,8 @@ import './App.css';
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
 
-  // --- دالة المزامنة الخارجية (API Sync) المحدثة لتجنب خطأ 400 ---
+  // --- دالة المزامنة الخارجية (إرسال البيانات) ---
   const syncWithCloud = async (collectionName, data) => {
-    // منع إرسال بيانات فارغة
     if (!data || (Array.isArray(data) && data.length === 0)) return;
 
     try {
@@ -31,15 +30,32 @@ const App = () => {
         url: 'https://maamoul-pro.vercel.app/api/sync',
         headers: { 'Content-Type': 'application/json' },
         data: {
-          collectionName: collectionName, // تم التعديل هنا لتطابق الـ API
-          data: data                     // تم التعديل هنا لتطابق الـ API
+          collectionName: collectionName,
+          data: data
         },
       };
-      // استخدام CapacitorHttp.post لإرسال البيانات
       await CapacitorHttp.post(options);
       console.log(`✅ تمت مزامنة ${collectionName} مع السحابة بنجاح`);
     } catch (error) {
       console.error("❌ خطأ في المزامنة الخارجية:", error);
+    }
+  };
+
+  // --- دالة جلب البيانات من السحابة (استلام البيانات) ---
+  const fetchFromCloud = async (collectionName, setter) => {
+    try {
+      const options = {
+        url: `https://maamoul-pro.vercel.app/api/sync?collectionName=${collectionName}`,
+        headers: { 'Content-Type': 'application/json' },
+      };
+      const response = await CapacitorHttp.get(options);
+      if (response.data && response.data.success && response.data.data) {
+        // تحديث الحالة بالبيانات المستلمة
+        setter(response.data.data);
+        console.log(`📥 تم جلب بيانات ${collectionName} من السحابة`);
+      }
+    } catch (error) {
+      console.error(`❌ خطأ في جلب بيانات ${collectionName}:`, error);
     }
   };
 
@@ -64,11 +80,26 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadSavedData('cashBook', []));
   const [staff, setStaff] = useState(() => loadSavedData('staff', []));
 
+  // جلب البيانات عند فتح التطبيق لأول مرة
+  useEffect(() => {
+    fetchFromCloud('stock', setStock);
+    fetchFromCloud('salesData', setSalesData);
+    fetchFromCloud('inventory', setInventory);
+    fetchFromCloud('expenses', setExpenses);
+    fetchFromCloud('waste', setWaste);
+    fetchFromCloud('suppliers', setSuppliers);
+    fetchFromCloud('customers', setCustomers);
+    fetchFromCloud('productionData', setProductionData);
+    fetchFromCloud('waitingList', setSupplierWaitingList);
+    fetchFromCloud('cashBook', setCashBook);
+    fetchFromCloud('staff', setStaff);
+  }, []);
+
+  // المزامنة التلقائية عند تغيير البيانات
   useEffect(() => {
     const keys = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
     Object.entries(keys).forEach(([key, val]) => {
       localStorage.setItem(key, JSON.stringify(val));
-      // مزامنة كل قسم عند حدوث تغيير فيه
       syncWithCloud(key, val);
     });
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
