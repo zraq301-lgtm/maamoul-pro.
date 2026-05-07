@@ -1,67 +1,14 @@
-import React from 'react';
-import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet, FileSpreadsheet, PlusCircle, Trash2 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import { Filesystem, Directory } from '@capacitor/filesystem'; // استيراد نظام ملفات الموبايل
+import React, { useState } from 'react';
+import { BarChart3, ArrowRight, TrendingUp, TrendingDown, DollarSign, PieChart, Package, Wallet, FileSpreadsheet, PlusCircle, Trash2, X } from 'lucide-react';
 
 const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
+  const [showExcelView, setShowExcelView] = useState(false); // حالة إظهار الجدول
   const s = stats;
   const netProfit = s.netProfit || 0;
 
-  // --- وظيفة التصدير المعدلة لتعمل على الأندرويد ---
-  const handleExportExcel = async () => {
-    try {
-      // 1. تجهيز البيانات
-      const summaryData = [
-        { "البند": "إجمالي الإيرادات", "القيمة": s.totalIncome || 0 },
-        { "البند": "إجمالي المصروفات", "القيمة": s.totalExpenses || 0 },
-        { "البند": "صافي الأرباح", "القيمة": netProfit },
-        { "البند": "قيمة المخزن", "القيمة": s.stockValue || 0 },
-        { "البند": "رصيد الخزينة", "القيمة": s.cashBalance || 0 }
-      ];
-
-      const cashBookData = cashBook.map(entry => ({
-        "التاريخ": entry.timestamp,
-        "البيان": entry.description || entry.category,
-        "النوع": entry.type === 'in' ? 'وارد' : 'صادر',
-        "المبلغ": entry.amount
-      }));
-
-      // 2. إنشاء ملف الإكسل (بصيغة Base64 للموبايل)
-      const wb = XLSX.utils.book_new();
-      const wsSummary = XLSX.utils.json_to_sheet(summaryData);
-      const wsCashBook = XLSX.utils.json_to_sheet(cashBookData);
-      XLSX.utils.book_append_sheet(wb, wsSummary, "الملخص");
-      XLSX.utils.book_append_sheet(wb, wsCashBook, "السجل");
-
-      // تحويل الكتاب إلى Buffer (Base64)
-      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-
-      // 3. حفظ الملف في ذاكرة الهاتف (Android)
-      const fileName = `Financial_Report_${Date.now()}.xlsx`;
-      
-      await Filesystem.writeFile({
-        path: fileName,
-        data: wbout,
-        directory: Directory.Documents, // سيتم حفظه في مجلد Documents
-        recursive: true
-      });
-
-      alert(`تم حفظ ملف الإكسل بنجاح في مجلد المستندات باسم: ${fileName}`);
-      
-    } catch (error) {
-      console.error("خطأ في حفظ الملف:", error);
-      alert("تعذر حفظ الملف. تأكد من إعطاء صلاحية الوصول للملفات.");
-    }
-  };
-
-  const handleAddStatement = () => {
-    const name = prompt("أدخل اسم القائمة الجديدة:");
-    if (name) alert(`تم إضافة قائمة: ${name}`);
-  };
-
-  const handleDeleteStatement = () => {
-    const confirmDelete = window.confirm("هل أنت متأكد من حذف آخر قائمة؟");
-    if (confirmDelete) alert("تم الحذف بنجاح");
+  // --- وظيفة "فتح الإكسل" داخل التطبيق ---
+  const handleOpenExcelView = () => {
+    setShowExcelView(true);
   };
 
   const statItems = [
@@ -74,21 +21,63 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
   ];
 
   return (
-    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
+    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', position: 'relative' }}>
+      
+      {/* نافذة عرض الإكسل (الجدول المجدول) */}
+      {showExcelView && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'white', zIndex: 1000, display: 'flex', flexDirection: 'column', padding: '10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <FileSpreadsheet color="#1d6f42" />
+              <h3 style={{ margin: 0 }}>عرض البيانات المجدولة</h3>
+            </div>
+            <button onClick={() => setShowExcelView(false)} style={{ background: '#eee', border: 'none', borderRadius: '50%', padding: '5px', cursor: 'pointer' }}>
+              <X size={24} />
+            </button>
+          </div>
+
+          <div style={{ overflow: 'auto', flex: 1 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'right' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#1d6f42', color: 'white' }}>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>التاريخ</th>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>البيان</th>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>النوع</th>
+                  <th style={{ padding: '10px', border: '1px solid #ddd' }}>المبلغ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cashBook.map((entry, idx) => (
+                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#f9f9f9' : 'white' }}>
+                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>{entry.timestamp}</td>
+                    <td style={{ padding: '8px', border: '1px solid #ddd' }}>{entry.description || entry.category}</td>
+                    <td style={{ padding: '8px', border: '1px solid #ddd', color: entry.type === 'in' ? 'green' : 'red' }}>{entry.type === 'in' ? 'وارد' : 'صادر'}</td>
+                    <td style={{ padding: '8px', border: '1px solid #ddd', fontWeight: 'bold' }}>{parseFloat(entry.amount).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p style={{ fontSize: '0.7rem', color: '#666', textAlign: 'center' }}>تم استخراج البيانات بتاريخ {new Date().toLocaleDateString('ar-EG')}</p>
+        </div>
+      )}
+
       <div className="page-header"><BarChart3 size={28} color="#16a085" /><h2>القوائم المالية</h2></div>
 
+      {/* الأزرار */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '15px' }}>
-        <button onClick={handleExportExcel} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#1d6f42', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
-          <FileSpreadsheet size={20} /> تصدير Excel
+        <button onClick={handleOpenExcelView} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#1d6f42', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
+          <FileSpreadsheet size={20} /> فتح Excel
         </button>
-        <button onClick={handleAddStatement} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#3498db', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
+        <button style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#3498db', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
           <PlusCircle size={20} /> إضافة قائمة
         </button>
-        <button onClick={handleDeleteStatement} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
+        <button style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px', padding: '10px', border: 'none', borderRadius: '12px', backgroundColor: '#e74c3c', color: 'white', cursor: 'pointer', fontSize: '0.75rem' }}>
           <Trash2 size={20} /> حذف قائمة
         </button>
       </div>
 
+      {/* باقي الكود الأصلي (الملخص المالي) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
         {statItems.map((item, i) => (
           <div key={i} className="glass-card" style={{ padding: '14px', background: item.bg }}>
@@ -102,18 +91,6 @@ const Financials = ({ onBack, stats = {}, cashBook = [] }) => {
         <div style={{ fontSize: '0.95rem', color: '#475569', marginBottom: '8px' }}>صافي الأرباح</div>
         <div style={{ fontSize: '2rem', fontWeight: '900', color: netProfit >= 0 ? '#166534' : '#991b1b' }}>{netProfit.toLocaleString()} <small style={{ fontSize: '1rem' }}>ج.م</small></div>
       </div>
-
-      {cashBook.length > 0 && (
-        <div className="glass-card" style={{ marginBottom: '15px' }}>
-          <h3 style={{ marginTop: 0, fontSize: '1rem', marginBottom: '12px', color: '#334155' }}>آخر حركات الخزينة</h3>
-          {cashBook.slice(-10).reverse().map((entry, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < 9 ? '1px solid rgba(226, 232, 240, 0.5)' : 'none' }}>
-              <div><div style={{ fontWeight: 'bold', fontSize: '0.9rem', color: '#1e293b' }}>{entry.description || entry.category}</div><div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{entry.timestamp}</div></div>
-              <div style={{ fontWeight: '800', color: entry.type === 'in' ? '#2ecc71' : '#e74c3c', fontSize: '0.95rem' }}>{entry.type === 'in' ? '+' : '-'}{parseFloat(entry.amount || 0).toLocaleString()}</div>
-            </div>
-          ))}
-        </div>
-      )}
 
       <button onClick={onBack} className="btn-back"><ArrowRight size={18} /> العودة للوحة التحكم</button>
     </div>
