@@ -21,18 +21,23 @@ import './App.css';
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
 
-  // --- دوال المزامنة (بدون تغيير) ---
+  // --- دوال المزامنة الذكية ---
+  
+  // المحرك الذكي للرفع: يضمن عدم إرسال بيانات فارغة تسبب خطأ BulkWrite
   const syncWithCloud = async (collectionName, data) => {
-    if (!data) return;
+    if (!data || (Array.isArray(data) && data.length === 0)) return;
     try {
       await CapacitorHttp.post({
         url: 'https://maamoul-pro-five.vercel.app/api/sync',
         headers: { 'Content-Type': 'application/json' },
         data: { collectionName, data },
       });
-    } catch (error) { console.error("Sync Error:", collectionName); }
+    } catch (error) { 
+      console.error(`Sync Error [${collectionName}]:`, error); 
+    }
   };
 
+  // المحرك الذكي للسحب: يطابق البيانات السحابية بالمحلية ويحدث التخزين
   const fetchFromCloud = async (collectionName, setter) => {
     try {
       const response = await CapacitorHttp.get({
@@ -42,13 +47,19 @@ const App = () => {
       if (response.data?.success && response.data?.data) {
         const cloudData = response.data.data;
         const localData = JSON.parse(localStorage.getItem(collectionName) || '[]');
+        
+        // ذكاء المطابقة: إذا كانت بيانات السحاب أحدث أو أمتلأ، نعتمدها
         const finalData = cloudData.length > 0 ? cloudData : localData;
+        
         setter(finalData);
         localStorage.setItem(collectionName, JSON.stringify(finalData));
       }
-    } catch (error) { console.error("Fetch Error:", collectionName); }
+    } catch (error) { 
+      console.error(`Fetch Error [${collectionName}]:`, error); 
+    }
   };
 
+  // المحرك الذكي للحذف: يحذف من السحاب والاندرويد معاً
   const deleteFromCloud = async (collectionName, id) => {
     try {
       await CapacitorHttp.post({
@@ -56,7 +67,9 @@ const App = () => {
         headers: { 'Content-Type': 'application/json' },
         data: { collectionName, id },
       });
-    } catch (error) { console.error("Delete Error:", collectionName); }
+    } catch (error) { 
+      console.error(`Delete Error [${collectionName}]:`, error); 
+    }
   };
 
   const loadInitial = (key, initialValue) => {
@@ -64,7 +77,7 @@ const App = () => {
     return saved ? JSON.parse(saved) : initialValue;
   };
 
-  // --- الحالات (States) ---
+  // --- الحالات (States) - مخزن البيانات المركزي ---
   const [stock, setStock] = useState(() => loadInitial('stock', []));
   const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
   const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
@@ -77,40 +90,65 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
+  // --- تأثير التشغيل الأول (Initial Load) ---
   useEffect(() => {
     const cols = ['stock', 'salesData', 'inventory', 'expenses', 'waste', 'suppliers', 'customers', 'productionData', 'waitingList', 'cashBook', 'staff'];
-    cols.forEach(col => {
-      const setters = { stock: setStock, salesData: setSalesData, inventory: setInventory, expenses: setExpenses, waste: setWaste, suppliers: setSuppliers, customers: setCustomers, productionData: setProductionData, waitingList: setSupplierWaitingList, cashBook: setCashBook, staff: setStaff };
-      fetchFromCloud(col, setters[col]);
-    });
+    const setters = { 
+      stock: setStock, salesData: setSalesData, inventory: setInventory, 
+      expenses: setExpenses, waste: setWaste, suppliers: setSuppliers, 
+      customers: setCustomers, productionData: setProductionData, 
+      waitingList: setSupplierWaitingList, cashBook: setCashBook, staff: setStaff 
+    };
+
+    cols.forEach(col => fetchFromCloud(col, setters[col]));
   }, []);
 
+  // --- محرك المزامنة التلقائية عند أي تغيير (Auto-Sync) ---
   useEffect(() => {
-    const syncMap = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
+    const syncMap = { 
+      stock, salesData, inventory, expenses, waste, suppliers, 
+      customers, productionData, waitingList: supplierWaitingList, 
+      cashBook, staff 
+    };
+
     Object.entries(syncMap).forEach(([key, val]) => {
       localStorage.setItem(key, JSON.stringify(val));
       syncWithCloud(key, val);
     });
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
 
-  // --- منطق الحسابات ---
+  // --- محرك الحسابات المالية الذكي ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const totalPurchases = inventory.filter(p => p.paymentMethod === 'كاش').reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
-    return { totalIncome, totalExpenses: totalExp, cashBalance: totalIncome - (totalExp + totalPurchases), stockValue: stock.reduce((sum, s) => sum + (s.balance * (s.price || 0)), 0) };
+    
+    return { 
+      totalIncome, 
+      totalExpenses: totalExp, 
+      cashBalance: totalIncome - (totalExp + totalPurchases), 
+      stockValue: stock.reduce((sum, s) => sum + ((s.balance || 0) * (s.price || 0)), 0) 
+    };
   }, [salesData, expenses, inventory, stock]);
 
+  // استلام حركة النقدية
   const addCashEntry = (entry) => {
-    const newEntry = { ...entry, id: Date.now(), displayDate: new Date().toLocaleString('ar-EG'), timestamp: new Date().toISOString() };
+    const newEntry = { 
+      ...entry, 
+      id: Date.now(), 
+      displayDate: new Date().toLocaleString('ar-EG'), 
+      timestamp: new Date().toISOString() 
+    };
     setCashBook(prev => [newEntry, ...prev]);
   };
 
+  // محرك الحذف العام (محلي + سحابي)
   const handleGenericDelete = (collectionName, id, setter) => {
     setter(prev => prev.filter(item => (item.id !== id && item._id !== id)));
     deleteFromCloud(collectionName, id);
   };
 
+  // محرك إدارة المشتريات والمخزن
   const handleSavePurchase = (p) => {
     setInventory(prev => [...prev, p]);
     setStock(prev => {
@@ -130,7 +168,7 @@ const App = () => {
 
   const handleDirectStockAdd = (item) => setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]);
 
-  // --- رندرة الصفحات (هنا تم إضافة الحالات المفقودة للإنتاج والهالك) ---
+  // --- محرك عرض الصفحات وتوزيع البيانات ---
   const renderPage = () => {
     const cp = { onBack: () => setActivePage('dashboard') };
     switch (activePage) {
@@ -144,12 +182,10 @@ const App = () => {
         return <PurchasesManager {...cp} stock={stock} onPurchaseComplete={handleSavePurchase} 
                onOrderTrigger={(d) => setSupplierWaitingList(prev => [d, ...prev])} />;
       
-      // إضافة قسم الإنتاج هنا ليعمل الربط
       case 'production':
         return <ProductionManager {...cp} stock={stock} setStock={setStock} 
                onSaveProduction={(data) => setProductionData(prev => [data, ...prev])} />;
 
-      // إضافة قسم الهالك هنا ليعمل الربط
       case 'waste':
         return <Waste {...cp} stock={stock} setStock={setStock}
                onSaveWaste={(w) => setWaste(prev => [w, ...prev])}
