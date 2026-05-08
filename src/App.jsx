@@ -49,6 +49,17 @@ const App = () => {
     } catch (error) { console.error("Fetch Error:", collectionName); }
   };
 
+  // دالة الحذف المفعلة باستخدام الرابط الجديد
+  const deleteFromCloud = async (collectionName, id) => {
+    try {
+      await CapacitorHttp.post({
+        url: 'https://maamoul-pro-five.vercel.app/api/delete-item', // الرابط بناءً على اسم الملف المذكور
+        headers: { 'Content-Type': 'application/json' },
+        data: { collectionName, id },
+      });
+    } catch (error) { console.error("Delete Error:", collectionName); }
+  };
+
   const loadInitial = (key, initialValue) => {
     const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved) : initialValue;
@@ -116,12 +127,17 @@ const App = () => {
 
   const handleDirectStockAdd = (item) => setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]);
 
-  // --- رندرة الصفحات المصلحة (لحل مشكلة الصفحة البيضاء) ---
+  const handleDeleteStockItem = (id) => {
+    setStock(prev => prev.filter(i => i.id !== id));
+    deleteFromCloud('stock', id);
+  };
+
+  // --- رندرة الصفحات المصلحة ---
   const renderPage = () => {
     const cp = { onBack: () => setActivePage('dashboard') };
     switch (activePage) {
       case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
-      case 'inventory': return <Inventory {...cp} categories={stock} onAddItem={handleDirectStockAdd} onDeleteItem={(id) => setStock(prev => prev.filter(i => i.id !== id))} />;
+      case 'inventory': return <Inventory {...cp} categories={stock} onAddItem={handleDirectStockAdd} onDeleteItem={handleDeleteStockItem} />;
       case 'purchases': return <PurchasesManager {...cp} stock={stock} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(d) => setSupplierWaitingList(prev => [d, ...prev])} />;
       case 'sales': return <Sales {...cp} onSaveSale={(s) => { setSalesData(prev => [...prev, s]); addCashEntry({type:'وارد', category:'مبيعات', amount:s.total, description:s.productName}); }} customers={customers} stock={stock} />;
       case 'expenses': return <Expenses {...cp} onSaveExpense={(e) => { setExpenses(prev => [...prev, e]); addCashEntry({type:'صادر', category:e.category, amount:e.amount, description:e.description}); }} />;
