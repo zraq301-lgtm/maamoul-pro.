@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FileSpreadsheet, ArrowRight, Plus, Table as TableIcon, LayoutGrid, Trash2, Package, Archive, Layers, Activity, AlertTriangle, Bell } from 'lucide-react';
+// استيراد CapacitorHttp للتعامل مع الطلبات الخارجية في الأندرويد
+import { CapacitorHttp } from '@capacitor/core';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, setStock }) => {
   const [activeTab, setActiveTab] = useState('raw');
@@ -7,12 +9,10 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, setStock 
   const [gridData, setGridData] = useState([]);
   const [alerts, setAlerts] = useState([]);
 
-  // حساب الرصيد الإجمالي الفعلي للمخزن
   const totalActualStock = useMemo(() => {
     return gridData.reduce((sum, item) => sum + (parseFloat(item.balance) || 0), 0);
   }, [gridData]);
 
-  // دالة إرسال إشعارات الأندرويد / النظام
   const sendSystemNotification = (title, body) => {
     if ("Notification" in window) {
       if (Notification.permission === "granted") {
@@ -27,7 +27,6 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, setStock 
     }
   };
 
-  // فحص مستويات المخزون وإصدار التنبيهات
   useEffect(() => {
     const lowStockItems = gridData.filter(item => 
       item.name && item.balance !== '' && parseFloat(item.balance) < 5
@@ -50,35 +49,40 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, setStock 
     isNew: true
   });
 
-  // دالة الحذف النهائية (قاعدة البيانات + الواجهة)
+  // دالة الحذف المحدثة باستخدام CapacitorHttp
   const handleDeleteProcess = async (id, isNew) => {
     if (window.confirm("هل أنت متأكد من حذف هذا الصنف نهائياً؟")) {
       try {
-        // 1. إذا لم يكن صفاً جديداً فارغاً، احذفه من قاعدة البيانات
+        // 1. إذا لم يكن صفاً جديداً، أرسل طلب الحذف للسيرفر
         if (!isNew) {
-          const response = await fetch('https://maamoul-pro-five.vercel.app/api/delete-item', {
-            method: 'POST',
+          const options = {
+            url: 'https://maamoul-pro-five.vercel.app/api/delete-item',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id })
-          });
+            data: { id: id },
+          };
 
-          if (!response.ok) throw new Error("فشل الحذف من الخادم");
+          // استخدام الطريقة التي طلبتها للاتصال الخارجي
+          const response = await CapacitorHttp.post(options);
+
+          // في CapacitorHttp، الحالة تعود في response.status
+          if (response.status !== 200 && response.status !== 204) {
+            throw new Error("فشل الحذف من الخادم");
+          }
         }
 
         // 2. تحديث الواجهة فوراً (React State)
         const updatedData = gridData.filter(item => item.id !== id);
         setGridData(updatedData);
 
-        // 3. تحديث مصفوفة المخزن الأب (لضمان المزامنة مع App.js)
+        // 3. تحديث مصفوفة المخزن الأب
         if (onDeleteItem) {
           onDeleteItem(id);
         }
 
-        console.log("تم الحذف بنجاح من قاعدة البيانات والمكتبة المحلية");
+        console.log("تم الحذف بنجاح عبر CapacitorHttp");
       } catch (error) {
         console.error("خطأ في الحذف:", error);
-        alert("حدث خطأ أثناء الاتصال بقاعدة البيانات، تم الحذف من الشاشة فقط.");
-        // حذف من الواجهة حتى لو فشل السيرفر لراحة المستخدم
+        alert("فشل الاتصال بالسيرفر. سيتم الحذف من الشاشة فقط.");
         setGridData(prev => prev.filter(item => item.id !== id));
       }
     }
@@ -117,7 +121,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, setStock 
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#f1f5f9', paddingBottom: '120px' }}>
       
-      {/* التنبيهات الداخلية */}
+      {/* التنبيهات */}
       {alerts.length > 0 && (
         <div style={{ background: '#fff1f2', borderRight: '5px solid #ef4444', padding: '12px', borderRadius: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)' }}>
           <AlertTriangle color="#ef4444" size={20} />
