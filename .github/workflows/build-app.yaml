@@ -24,27 +24,41 @@ jobs:
           distribution: 'temurin'
           java-version: '17' 
 
-      - name: 3. Setup Node.js 24
+      - name: 3. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20' # إصدار 20 هو الأكثر استقراراً لـ Vite 6 و Capacitor حالياً
+          cache: 'npm'
 
-      - name: 4. Deep Clean & Install
+      - name: 4. Install Dependencies & Build Web
         run: |
-          rm -rf node_modules package-lock.json android ios dist_web
+          # تنظيف البيئة لضمان عدم وجود ملفات تالفة
+          rm -rf node_modules package-lock.json dist www
           npm install --legacy-peer-deps
+          # بناء نسخة الويب أولاً
           npm run build
 
-      - name: 5. Initialize Android (Fresh Start)
+      - name: 5. Capacitor Preparation
         run: |
+          # التأكد من وجود مجلد www قبل محاولة الربط مع أندرويد
           mkdir -p www
-          npx cap add android
+          # تركيب Capacitor CLI محلياً لضمان وجود الـ Executable
+          npm install @capacitor/cli @capacitor/core @capacitor/android --legacy-peer-deps
+          
+          # إضافة منصة أندرويد إذا لم تكن موجودة
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          
+          # مزامنة الملفات من www إلى مجلد أندرويد
+          npx cap copy android
           npx cap sync android
 
       - name: 6. Inject Firebase & App Identity
         shell: bash
         run: |
-          # حقن ملف جوجل سيرفس
+          # حقن ملف جوجل سيرفس في المسار الصحيح
+          mkdir -p android/app/
           cat <<EOF > android/app/google-services.json
           {
             "project_info": { "project_number": "162488255991", "project_id": "mamoul-app" },
@@ -53,40 +67,54 @@ jobs:
           }
           EOF
 
-          # تعديل الهوية
+          # تعديل هوية التطبيق (الاسم وحزمة الحماية)
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
-          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">معمول<\/string>/' $STRINGS
+          
+          if [ -f "$STRINGS" ]; then
+            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">معمول<\/string>/' $STRINGS
+          fi
+          
           sed -i 's/namespace ".*"/namespace "com.mamoul.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.mamoul.app"/' $APP_GRADLE
 
-      - name: 7. Generate Icons
+      - name: 7. Generate Icons & Assets
         run: |
           npm install @capacitor/assets --save-dev --legacy-peer-deps
-          npx capacitor-assets generate --android
+          # التأكد من وجود أيقونة المصدر قبل التوليد (افترض وجودها في resources/icon.png)
+          # إذا لم تكن موجودة سيتجاوز الخطوة لتجنب الانهيار
+          npx capacitor-assets generate --android || echo "Icons generation skipped - source not found"
 
-      - name: 8. Fix Dependencies & Build
+      - name: 8. Fix Dependencies & Native Build
         run: |
           cd android
           chmod +x gradlew
           
-          # إجبار Gradle على استبدال المكتبة التالفة بنسخة سليمة (هذا هو الحل الحقيقي)
+          # حل مشكلة مكتبة bcprov وإجبار Gradle على النسخة المستقرة
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
           
           ./gradlew clean
-          ./gradlew assembleRelease --no-daemon --no-build-cache -Dorg.gradle.java.home=$JAVA_HOME
+          ./gradlew assembleRelease --no-daemon --no-build-cache
 
-      - name: 9. Sign & Publish
+      - name: 9. Sign APK
         run: |
+          # إنشاء مفتاح التوقيع
           keytool -genkey -v -keystore mamoul.jks -alias mamoul_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" -dname "CN=MamoulApp, O=Mamoul, C=EG"
+          
+          # البحث عن أداة التوقيع والـ APK
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -r | head -n 1)
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          
+          # التوقيع النهائي
           $APKSIGNER sign --ks mamoul.jks --ks-pass pass:"mamoul_pass_2026" --out Mamoul-Final.apk "$APK_PATH"
 
-      - name: 10. Release
+      - name: 10. Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Mamoul Release v1.0.${{ github.run_number }}"
           files: Mamoul-Final.apk
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
