@@ -13,20 +13,28 @@ export default async function handler(request, response) {
         const db = client.db("maamoul_db");
         const { collectionName, data } = request.body;
 
-        if (!collectionName || !data) {
+        // التحقق من وجود البيانات الأساسية
+        if (!collectionName || data === undefined || data === null) {
             return response.status(400).json({ error: 'بيانات ناقصة' });
         }
 
-        // --- التعديل الجذري هنا ---
-        
         if (Array.isArray(data)) {
+            // --- علاج الخطأ الرئيسي هنا ---
+            // إذا كانت المصفوفة فارغة، ننهي الطلب بنجاح دون إرسال شيء لقاعدة البيانات
+            if (data.length === 0) {
+                return response.status(200).json({ 
+                    success: true, 
+                    message: 'لا توجد بيانات للمزامنة (المصفوفة فارغة)',
+                    result: { matchedCount: 0, upsertedCount: 0 } 
+                });
+            }
+
             const operations = data.map(item => {
-                // نأخذ نسخة من البيانات ونحذف منها الـ _id تماماً لمنع الخطأ
                 const { _id, ...cleanData } = item; 
                 
                 return {
                     updateOne: {
-                        filter: { id: item.id }, // نعتمد في البحث على id الخاص بك وليس _id
+                        filter: { id: item.id }, 
                         update: { 
                             $set: { 
                                 ...cleanData, 
@@ -38,10 +46,12 @@ export default async function handler(request, response) {
                 };
             });
 
+            // الآن استدعاء bulkWrite آمن لأننا تأكدنا أن data.length > 0
             const result = await db.collection(collectionName).bulkWrite(operations);
             return response.status(200).json({ success: true, result });
+
         } else {
-            // نفس الشيء للعنصر الواحد
+            // التعامل مع عنصر واحد (Object)
             const { _id, ...cleanData } = data;
             
             const result = await db.collection(collectionName).updateOne(
