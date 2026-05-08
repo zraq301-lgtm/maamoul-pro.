@@ -1,12 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, ArrowRight, Plus, Table as TableIcon, LayoutGrid, Trash2, Package, Archive, Layers } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FileSpreadsheet, ArrowRight, Plus, Table as TableIcon, LayoutGrid, Trash2, Package, Archive, Layers, Activity, AlertTriangle, Bell } from 'lucide-react';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
-  const [activeTab, setActiveTab] = useState('raw'); // 'raw' أو 'finished'
-  const [viewMode, setViewMode] = useState('table'); // 'table' أو 'shelves'
+  const [activeTab, setActiveTab] = useState('raw');
+  const [viewMode, setViewMode] = useState('table');
   const [gridData, setGridData] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
-  // دالة لتوليد سطر فارغ
+  // حساب الرصيد الإجمالي الفعلي للمخزن
+  const totalActualStock = useMemo(() => {
+    return gridData.reduce((sum, item) => sum + (parseFloat(item.balance) || 0), 0);
+  }, [gridData]);
+
+  // دالة إرسال إشعارات الأندرويد / النظام
+  const sendSystemNotification = (title, body) => {
+    if ("Notification" in window) {
+      if (Notification.permission === "granted") {
+        new Notification(title, { body, icon: "/logo.png" });
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            new Notification(title, { body });
+          }
+        });
+      }
+    }
+  };
+
+  // فحص مستويات المخزون وإصدار التنبيهات
+  useEffect(() => {
+    const lowStockItems = gridData.filter(item => 
+      item.name && item.balance !== '' && parseFloat(item.balance) < 5
+    );
+    
+    setAlerts(lowStockItems);
+
+    // إذا وجد نقص جديد، أرسل إشعار للنظام (الأندرويد)
+    if (lowStockItems.length > 0) {
+      const lastItem = lowStockItems[lowStockItems.length - 1];
+      sendSystemNotification("⚠️ تنبيه مخزن", `الصنف "${lastItem.name}" أوشك على النفاد!`);
+    }
+  }, [gridData]);
+
   const createEmptyRow = () => ({
     id: `new-${Math.random().toString(36).substr(2, 9)}`,
     name: '',
@@ -31,7 +66,6 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
       isNew: false
     }));
 
-    // المنتج النهائي يظهر كبيانات فقط، المواد الخام تفتح شيت إكسل
     if (activeTab === 'raw') {
       setGridData([...initialRows, ...Array(5).fill(null).map(createEmptyRow)]);
     } else {
@@ -50,8 +84,18 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#f1f5f9', paddingBottom: '120px' }}>
       
+      {/* التنبيهات الداخلية في الصفحة */}
+      {alerts.length > 0 && (
+        <div style={{ background: '#fff1f2', borderRight: '5px solid #ef4444', padding: '12px', borderRadius: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)' }}>
+          <AlertTriangle color="#ef4444" size={20} />
+          <marquee style={{ fontSize: '0.85rem', color: '#991b1b', fontWeight: 'bold' }}>
+            تنبيه نقص مخزن: {alerts.map(a => `${a.name} (${a.balance})`).join(' | ')} - يرجى طلب توريد فوري!
+          </marquee>
+        </div>
+      )}
+
       {/* الرأس */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
            <div style={{ background: '#1e5631', color: '#fff', padding: '12px', borderRadius: '15px', boxShadow: '0 4px 10px rgba(30,86,49,0.2)' }}>
               {activeTab === 'raw' ? <FileSpreadsheet size={24} /> : <Package size={24} />}
@@ -60,102 +104,116 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
               <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#1e293b' }}>
                 {activeTab === 'raw' ? 'مخزن المواد الخام' : 'طلبيات المنتج النهائي'}
               </h2>
-              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>إدارة ذكية للمخزون</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
+                <Activity size={14} color="#1e5631" />
+                <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e5631' }}>
+                  الرصيد الفعلي الحالي: {totalActualStock.toLocaleString()}
+                </span>
+              </div>
            </div>
         </div>
-        <button onClick={onBack} style={{ background: '#fff', border: 'none', width: '45px', height: '45px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          <ArrowRight size={24} color="#1e293b" />
+        <button onClick={onBack} style={{ background: '#fff', border: 'none', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+          <ArrowRight size={22} color="#1e293b" />
         </button>
       </div>
 
       {/* التبديل الرئيسي */}
       <div style={{ display: 'flex', background: '#e2e8f0', padding: '5px', borderRadius: '15px', marginBottom: '20px' }}>
-        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '11px', border: 'none', backgroundColor: activeTab === 'raw' ? '#fff' : 'transparent', color: activeTab === 'raw' ? '#1e5631' : '#64748b', fontWeight: 'bold', transition: '0.3s' }}>
-          <Layers size={18} style={{marginLeft: '8px'}} /> المواد الخام
+        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '11px', border: 'none', backgroundColor: activeTab === 'raw' ? '#fff' : 'transparent', color: activeTab === 'raw' ? '#1e5631' : '#64748b', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>
+          <Layers size={18} style={{marginLeft: '8px', verticalAlign: 'middle'}} /> المواد الخام
         </button>
-        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '11px', border: 'none', backgroundColor: activeTab === 'finished' ? '#fff' : 'transparent', color: activeTab === 'finished' ? '#1e5631' : '#64748b', fontWeight: 'bold', transition: '0.3s' }}>
-          <Archive size={18} style={{marginLeft: '8px'}} /> المنتج النهائي
+        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '11px', border: 'none', backgroundColor: activeTab === 'finished' ? '#fff' : 'transparent', color: activeTab === 'finished' ? '#1e5631' : '#64748b', fontWeight: 'bold', cursor: 'pointer', transition: '0.3s' }}>
+          <Archive size={18} style={{marginLeft: '8px', verticalAlign: 'middle'}} /> المنتج النهائي
         </button>
       </div>
 
-      {/* زر تبديل العرض (جدول / رفوف) */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px' }}>
-        <div style={{ background: '#fff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-          <button onClick={() => setViewMode('table')} style={{ padding: '8px 15px', border: 'none', background: viewMode === 'table' ? '#f1f5f9' : 'transparent', borderRadius: '8px', color: viewMode === 'table' ? '#1e5631' : '#94a3b8' }}>
-            <TableIcon size={20} />
+      {/* خيارات العرض */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 'bold' }}>
+           {viewMode === 'table' ? 'وضع تحرير الجداول الذكي' : 'وضع عرض الرفوف البصري'}
+        </span>
+        <div style={{ background: '#fff', padding: '4px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', gap: '2px' }}>
+          <button onClick={() => setViewMode('table')} style={{ padding: '8px 12px', border: 'none', background: viewMode === 'table' ? '#1e5631' : 'transparent', borderRadius: '8px', color: viewMode === 'table' ? '#fff' : '#94a3b8', cursor: 'pointer' }}>
+            <TableIcon size={18} />
           </button>
-          <button onClick={() => setViewMode('shelves')} style={{ padding: '8px 15px', border: 'none', background: viewMode === 'shelves' ? '#f1f5f9' : 'transparent', borderRadius: '8px', color: viewMode === 'shelves' ? '#1e5631' : '#94a3b8' }}>
-            <LayoutGrid size={20} />
+          <button onClick={() => setViewMode('shelves')} style={{ padding: '8px 12px', border: 'none', background: viewMode === 'shelves' ? '#1e5631' : 'transparent', borderRadius: '8px', color: viewMode === 'shelves' ? '#fff' : '#94a3b8', cursor: 'pointer' }}>
+            <LayoutGrid size={18} />
           </button>
         </div>
       </div>
 
       {/* محتوى العرض */}
       {viewMode === 'table' && activeTab === 'raw' ? (
-        /* عرض الإكسل للمواد الخام */
-        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+        <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '500px' }}>
               <thead>
-                <tr style={{ background: '#1e5631', color: '#fff' }}>
-                  <th style={{ padding: '12px', width: '40px' }}>#</th>
-                  <th style={{ padding: '12px', textAlign: 'right' }}>الصنف</th>
-                  <th style={{ padding: '12px' }}>التاريخ</th>
-                  <th style={{ padding: '12px' }}>الكمية</th>
-                  <th style={{ padding: '12px' }}>السعر</th>
-                  <th style={{ padding: '12px' }}>حذف</th>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                  <th style={{ padding: '15px', width: '50px', color: '#64748b', fontSize: '0.85rem' }}>#</th>
+                  <th style={{ padding: '15px', textAlign: 'right', color: '#1e293b', fontSize: '0.9rem' }}>الصنف</th>
+                  <th style={{ padding: '15px', color: '#1e293b', fontSize: '0.9rem' }}>التاريخ</th>
+                  <th style={{ padding: '15px', color: '#1e293b', fontSize: '0.9rem' }}>الكمية</th>
+                  <th style={{ padding: '15px', color: '#1e293b', fontSize: '0.9rem' }}>التكلفة</th>
+                  <th style={{ padding: '15px', width: '60px' }}>إجراء</th>
                 </tr>
               </thead>
               <tbody>
-                {gridData.map((item, index) => (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>{index + 1}</td>
-                    <td><input value={item.name} onChange={(e) => handleCellChange(item.id, 'name', e.target.value)} style={{ width: '100%', border: 'none', padding: '12px', outline: 'none' }} placeholder="..." /></td>
-                    <td><input type="date" value={item.date} onChange={(e) => handleCellChange(item.id, 'date', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', fontSize: '0.8rem' }} /></td>
-                    <td><input type="number" value={item.balance} onChange={(e) => handleCellChange(item.id, 'balance', e.target.value)} style={{ width: '60px', border: 'none', outline: 'none', textAlign: 'center' }} /></td>
-                    <td><input type="number" value={item.price} onChange={(e) => handleCellChange(item.id, 'price', e.target.value)} style={{ width: '60px', border: 'none', outline: 'none', textAlign: 'center' }} /></td>
-                    <td style={{ textAlign: 'center' }}>
-                      <button onClick={() => onDeleteItem(item.id)} style={{ color: '#ef4444', border: 'none', background: 'none' }}><Trash2 size={16} /></button>
-                    </td>
-                  </tr>
-                ))}
+                {gridData.map((item, index) => {
+                  const isLow = item.name && item.balance !== '' && parseFloat(item.balance) < 5;
+                  return (
+                    <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: isLow ? '#fff5f5' : 'transparent' }}>
+                      <td style={{ textAlign: 'center', color: '#cbd5e1', fontSize: '0.75rem', fontWeight: 'bold' }}>{index + 1}</td>
+                      <td>
+                        <input value={item.name} onChange={(e) => handleCellChange(item.id, 'name', e.target.value)} style={{ width: '100%', border: 'none', padding: '12px 15px', outline: 'none', background: 'transparent' }} placeholder="..." />
+                      </td>
+                      <td>
+                        <input type="date" value={item.date} onChange={(e) => handleCellChange(item.id, 'date', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center' }} />
+                      </td>
+                      <td>
+                        <input type="number" value={item.balance} onChange={(e) => handleCellChange(item.id, 'balance', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center', fontWeight: 'bold', color: isLow ? '#ef4444' : '#1e5631' }} placeholder="0" />
+                      </td>
+                      <td>
+                        <input type="number" value={item.price} onChange={(e) => handleCellChange(item.id, 'price', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center' }} placeholder="0" />
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button onClick={() => onDeleteItem(item.id)} style={{ color: '#ef4444', border: 'none', background: 'none' }}><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <button onClick={extendSheet} style={{ width: '100%', padding: '12px', background: '#f8fafc', border: 'none', color: '#1e5631', fontWeight: 'bold', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-            <Plus size={18} /> تمديد شيت الإكسل (إضافة صفوف)
+          <button onClick={extendSheet} style={{ width: '100%', padding: '15px', background: '#fff', border: 'none', color: '#1e5631', fontWeight: 'bold', borderTop: '2px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            <Plus size={18} /> تمديد شيت الإكسل
           </button>
         </div>
       ) : (
-        /* عرض الرفوف للمنتج النهائي أو عند اختيار وضع الرفوف */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
-          {gridData.filter(i => i.name).map(item => (
-            <div key={item.id} style={{ background: '#fff', borderRadius: '18px', padding: '15px', borderBottom: '4px solid #1e5631', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', textAlign: 'center', position: 'relative' }}>
-              <div style={{ background: '#f0fdf4', width: '50px', height: '50px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-                <Package size={24} color="#1e5631" />
-              </div>
-              <div style={{ fontWeight: 'bold', fontSize: '0.95rem', marginBottom: '5px' }}>{item.name}</div>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '10px' }}>الكمية: {item.balance}</div>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '5px' }}>
-                <button onClick={() => onDeleteItem(item.id)} style={{ padding: '6px', borderRadius: '8px', border: 'none', background: '#fee2e2', color: '#ef4444' }}>
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
-          {activeTab === 'finished' && (
-             <div onClick={onBack} style={{ border: '2px dashed #cbd5e1', borderRadius: '18px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', minHeight: '140px', cursor: 'pointer' }}>
-                <Plus size={30} />
-                <span style={{fontSize: '0.8rem'}}>إضافة طلب جديد</span>
-             </div>
-          )}
+          {gridData.filter(i => i.name).map(item => {
+             const isLow = parseFloat(item.balance) < 5;
+             return (
+                <div key={item.id} style={{ background: '#fff', borderRadius: '22px', padding: '20px', borderBottom: `5px solid ${isLow ? '#ef4444' : '#1e5631'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.05)', textAlign: 'center', position: 'relative' }}>
+                  {isLow && <div style={{ position: 'absolute', top: '10px', left: '10px' }}><AlertTriangle size={16} color="#ef4444" /></div>}
+                  <div style={{ background: isLow ? '#fee2e2' : '#f0fdf4', width: '55px', height: '55px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <Package size={26} color={isLow ? '#ef4444' : '#1e5631'} />
+                  </div>
+                  <div style={{ fontWeight: '900', fontSize: '1rem', color: '#1e293b' }}>{item.name}</div>
+                  <div style={{ display: 'inline-block', padding: '4px 12px', background: isLow ? '#fee2e2' : '#f1f5f9', borderRadius: '10px', fontSize: '0.85rem', color: isLow ? '#ef4444' : '#1e5631', fontWeight: 'bold', marginTop: '8px' }}>
+                    الرصيد: {item.balance}
+                  </div>
+                </div>
+             );
+          })}
         </div>
       )}
 
-      {/* زر الحفظ العائم */}
-      <button style={{ position: 'fixed', bottom: '20px', left: '20px', right: '20px', background: '#1e5631', color: '#fff', border: 'none', padding: '18px', borderRadius: '20px', fontWeight: 'bold', fontSize: '1rem', boxShadow: '0 10px 20px rgba(30,86,49,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-        اعتماد وحفظ البيانات في السحابة ☁️
-      </button>
+      {/* زر الحفظ */}
+      <div style={{ position: 'fixed', bottom: '0', left: '0', right: '0', padding: '20px', background: 'linear-gradient(to top, #f1f5f9 80%, transparent)', zIndex: 100 }}>
+        <button style={{ width: '100%', background: '#1e5631', color: '#fff', border: 'none', padding: '18px', borderRadius: '20px', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+          <Archive size={20} /> حفظ البيانات ومزامنة الإشعارات ✅
+        </button>
+      </div>
 
     </div>
   );
