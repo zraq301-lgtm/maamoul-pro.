@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Swal from 'sweetalert2';
 
+// استيراد مباشر لضمان توفر الأدوات فور تشغيل التطبيق
+import { CapacitorHttp, Capacitor } from '@capacitor/core';
+
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
 import Sales from './components/Sales';
@@ -17,21 +20,34 @@ import Settings from './components/Settings';
 
 import './App.css';
 
-// CapacitorHttp: use native HTTP on Android, fallback to fetch on web
-let CapacitorHttp = null;
-import('@capacitor/core').then(mod => { CapacitorHttp = mod.CapacitorHttp || null; }).catch(() => { CapacitorHttp = null; });
-
+// --- ضبط دوال الاتصال لتناسب الأندرويد والويب معاً ---
 const httpPost = async (url, body) => {
-  if (CapacitorHttp) {
-    return CapacitorHttp.post({ url, headers: { 'Content-Type': 'application/json' }, data: body });
+  // استخدام CapacitorHttp إذا كان التطبيق يعمل على الأندرويد
+  if (Capacitor.isNativePlatform()) {
+    const response = await CapacitorHttp.post({
+      url,
+      headers: { 'Content-Type': 'application/json' },
+      data: body
+    });
+    return response.data;
   }
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  // الفولباك للويب
+  const res = await fetch(url, { 
+    method: 'POST', 
+    headers: { 'Content-Type': 'application/json' }, 
+    body: JSON.stringify(body) 
+  });
   return res.json();
 };
 
 const httpGet = async (url) => {
-  if (CapacitorHttp) {
-    return CapacitorHttp.get({ url, headers: { 'Content-Type': 'application/json' } });
+  if (Capacitor.isNativePlatform()) {
+    const response = await CapacitorHttp.get({
+      url,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    // معالجة البيانات إذا كانت نصاً
+    return typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
   }
   const res = await fetch(url);
   return res.json();
@@ -65,8 +81,7 @@ const App = () => {
 
   const fetchFromCloud = async (collectionName, setter) => {
     try {
-      const result = await httpGet(`https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${collectionName}`);
-      const parsed = CapacitorHttp ? (typeof result.data === 'string' ? JSON.parse(result.data) : result.data) : result;
+      const parsed = await httpGet(`https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${collectionName}`);
       
       if (parsed?.success && parsed?.data) {
         const cloudData = parsed.data;
