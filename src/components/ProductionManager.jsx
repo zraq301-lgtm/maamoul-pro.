@@ -11,7 +11,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
 
   const [showReport, setShowReport] = useState(false);
   const [finalReport, setFinalReport] = useState(null);
-  const [productionQty, setProductionQty] = useState(0); // إدخال كمية الإنتاج يدوياً
+  const [productionQty, setProductionQty] = useState(''); // تم تغيير القيمة الافتراضية إلى نص فارغ لتسهيل الكتابة
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -19,7 +19,6 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
     selectedIngredients: [] 
   });
 
-  // المعيار العالمي (يستخدم للخصم الحسابي فقط)
   const GOLDEN_RECIPE = {
     "دقيق": 0.950, "سكر": 0.100, "عجوة": 0.055, "سمنة": 0.150,
     "زبدة": 0.050, "لبن": 0.280, "كارتون": 1, "تغليف": 0.020,
@@ -43,24 +42,23 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
     }));
   };
 
-  // معالجة الإنتاج بناءً على الكمية التي يحددها المستخدم
   const calculateProduction = () => {
-    if (productionQty <= 0) {
+    const qty = parseFloat(productionQty);
+    if (!qty || qty <= 0) {
       alert("الرجاء إدخال عدد الكراتين المنتجة أولاً");
       return;
     }
 
-    // حساب المستهلك بناءً على المعيار العالمي فقط دون النظر للنقص
     const details = formData.selectedIngredients.map(ing => {
       const ratio = GOLDEN_RECIPE[ing.name.trim()] || 0;
-      const consumed = productionQty * ratio;
+      const consumed = qty * ratio;
       return {
         name: ing.name,
         consumed: consumed.toFixed(3),
       };
     });
 
-    setFinalReport({ actualQty: productionQty, details });
+    setFinalReport({ actualQty: qty, details });
     setShowReport(true);
   };
 
@@ -117,17 +115,17 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
         <button onClick={onBack} style={iconBtnStyle}><ArrowLeft /></button>
       </div>
 
-      {/* مدخل كمية الإنتاج الأساسي */}
       <div style={{ background: '#fff', padding: '20px', borderRadius: '15px', marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', border: '2px solid #1e5631' }}>
         <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', fontSize: '1.1rem' }}>
           كم كرتونة تم إنتاجها اليوم؟
         </label>
         <input 
           type="number" 
+          inputMode="decimal"
           value={productionQty} 
-          onChange={(e) => setProductionQty(parseFloat(e.target.value) || 0)}
-          style={{ ...ingInput, width: '100%', fontSize: '2rem' }}
-          placeholder="0"
+          onChange={(e) => setProductionQty(e.target.value)}
+          style={ingInputCustom}
+          placeholder="إضغط هنا للكتابة..."
         />
       </div>
 
@@ -171,7 +169,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
                   <thead>
                     <tr style={{ borderBottom: '1px solid #eee' }}>
                       <th>المادة</th>
-                      <th>الكمية التي ستخصم</th>
+                      <th>الكمية</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -198,10 +196,20 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   );
 };
 
-// الستايلات (نفس ستايلاتك السابقة مع تحسينات طفيفة)
+// الستايلات المحسنة
 const headerStyle = { background: '#fff', padding: '20px', borderRadius: '15px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
 const selectStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' };
-const ingInput = { border: 'none', borderBottom: '2px solid #1e5631', textAlign: 'center', fontWeight: 'bold', outline: 'none', color: '#1e5631' };
+const ingInputCustom = { 
+    width: '100%', 
+    padding: '15px', 
+    fontSize: '1.8rem', 
+    textAlign: 'center', 
+    border: '2px solid #e2e8f0', 
+    borderRadius: '10px', 
+    color: '#1e5631', 
+    fontWeight: 'bold',
+    backgroundColor: '#f1f5f9' 
+};
 const mainBtnStyle = { width: '100%', padding: '18px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '12px' };
 const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', zIndex: 1000 };
 const modalContent = { background: '#fff', padding: '25px', borderRadius: '25px', width: '100%', maxWidth: '400px' };
