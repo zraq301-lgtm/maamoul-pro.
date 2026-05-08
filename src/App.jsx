@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import Swal from 'sweetalert2';
 
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
@@ -16,7 +17,29 @@ import Settings from './components/Settings';
 
 import './App.css';
 
-// Capacitor is only available in native app context - skip on web
+// CapacitorHttp: use native HTTP on Android, fallback to fetch on web
+let CapacitorHttp = null;
+import('@capacitor/core').then(mod => { CapacitorHttp = mod.CapacitorHttp || null; }).catch(() => { CapacitorHttp = null; });
+
+const httpPost = async (url, body) => {
+  if (CapacitorHttp) {
+    return CapacitorHttp.post({ url, headers: { 'Content-Type': 'application/json' }, data: body });
+  }
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return res.json();
+};
+
+const httpGet = async (url) => {
+  if (CapacitorHttp) {
+    return CapacitorHttp.get({ url, headers: { 'Content-Type': 'application/json' } });
+  }
+  const res = await fetch(url);
+  return res.json();
+};
+
+const showSwal = (title, icon = 'success') => {
+  Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
+};
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
@@ -30,15 +53,10 @@ const App = () => {
     }
   };
 
-  // Cloud sync using fetch (works on both web and native)
   const syncWithCloud = async (collectionName, data) => {
     if (!data || (Array.isArray(data) && data.length === 0)) return;
     try {
-      await fetch('https://maamoul-pro-five.vercel.app/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collectionName, data }),
-      });
+      await httpPost('https://maamoul-pro-five.vercel.app/api/sync', { collectionName, data });
     } catch (error) {
       // Silently fail - offline-first approach
     }
@@ -46,10 +64,10 @@ const App = () => {
 
   const fetchFromCloud = async (collectionName, setter) => {
     try {
-      const response = await fetch(`https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${collectionName}`);
-      const result = await response.json();
-      if (result?.success && result?.data) {
-        const cloudData = result.data;
+      const result = await httpGet(`https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${collectionName}`);
+      const parsed = CapacitorHttp ? (typeof result.data === 'string' ? JSON.parse(result.data) : result.data) : result;
+      if (parsed?.success && parsed?.data) {
+        const cloudData = parsed.data;
         const localData = JSON.parse(localStorage.getItem(collectionName) || '[]');
         const finalData = cloudData.length > 0 ? cloudData : localData;
         setter(finalData);
@@ -62,11 +80,7 @@ const App = () => {
 
   const deleteFromCloud = async (collectionName, id) => {
     try {
-      await fetch('https://maamoul-pro-five.vercel.app/api/delete-item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ collectionName, id }),
-      });
+      await httpPost('https://maamoul-pro-five.vercel.app/api/delete-item', { collectionName, id });
     } catch (error) {
       // Silently fail
     }
@@ -129,6 +143,7 @@ const App = () => {
   const handleGenericDelete = (collectionName, id, setter) => {
     setter(prev => prev.filter(item => (item.id !== id && item._id !== id)));
     deleteFromCloud(collectionName, id);
+    showSwal('تم الحذف بنجاح', 'success');
   };
 
   const handleSavePurchase = (p) => {
@@ -149,6 +164,7 @@ const App = () => {
     });
     if (p.paymentMethod === 'كاش') addCashEntry({ type: 'out', category: 'مشتريات', amount: total, description: `شراء: ${p.item}` });
     else if (p.paymentMethod === 'آجل' && p.supplier) setSuppliers(prev => prev.map(s => s.name === p.supplier ? { ...s, debt: (parseFloat(s.debt) || 0) + total } : s));
+    showSwal('تم حفظ عملية الشراء', 'success');
     setActivePage('dashboard');
   };
 
@@ -156,33 +172,40 @@ const App = () => {
     setSalesData(prev => [...prev, sale]);
     setStock(prev => prev.map(item => item.name === sale.productName ? { ...item, balance: Math.max(0, (item.balance || 0) - parseFloat(sale.quantity || 0)) } : item));
     addCashEntry({ type: 'in', category: 'مبيعات', amount: parseFloat(sale.total || 0), description: `بيع: ${sale.productName} - ${sale.customerName}` });
+    showSwal('تم تسجيل عملية البيع', 'success');
   };
 
   const handleSaveWaste = (wasteEntry) => {
     setWaste(prev => [...prev, wasteEntry]);
     const itemName = wasteEntry.itemName || wasteEntry.item;
     if (itemName) setStock(prev => prev.map(item => item.name === itemName ? { ...item, balance: Math.max(0, (item.balance || 0) - parseFloat(wasteEntry.quantity || 0)) } : item));
+    showSwal('تم تسجيل الهالك', 'warning');
   };
 
   const handleSaveExpense = (expense) => {
     setExpenses(prev => [...prev, expense]);
     addCashEntry({ type: 'out', category: expense.category, amount: parseFloat(expense.amount || 0), description: expense.description });
+    showSwal('تم تسجيل المصروف', 'success');
   };
 
-  const handleSaveProduction = (production) => setProductionData(prev => [...prev, production]);
+  const handleSaveProduction = (production) => {
+    setProductionData(prev => [...prev, production]);
+    showSwal('تم تسجيل الإنتاج بنجاح', 'success');
+  };
   const handleOrderTrigger = (orderData) => setSupplierWaitingList(prev => [orderData, ...prev]);
-  const handleAddSupplier = (supplier) => setSuppliers(prev => [...prev, { ...supplier, debt: supplier.debt || 0 }]);
-  const handleAddCustomer = (customer) => setCustomers(prev => [...prev, customer]);
+  const handleAddSupplier = (supplier) => { setSuppliers(prev => [...prev, { ...supplier, debt: supplier.debt || 0 }]); showSwal('تم إضافة المورد', 'success'); };
+  const handleAddCustomer = (customer) => { setCustomers(prev => [...prev, customer]); showSwal('تم إضافة العميل', 'success'); };
   const handlePaySupplierDebt = (supplierName, amount) => {
     setSuppliers(prev => prev.map(s => s.name === supplierName ? { ...s, debt: Math.max(0, (parseFloat(s.debt) || 0) - parseFloat(amount)) } : s));
     addCashEntry({ type: 'out', category: 'سداد موردين', amount: parseFloat(amount), description: `سداد ديون: ${supplierName}` });
+    showSwal('تم سداد دين المورد', 'success');
   };
 
-  const handleAddStaff = (employee) => setStaff(prev => [...prev, employee]);
-  const handleUpdateStaff = (id, updatedData) => setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
-  const handleDeleteStaff = (id) => setStaff(prev => prev.filter(s => s.id !== id));
+  const handleAddStaff = (employee) => { setStaff(prev => [...prev, employee]); showSwal('تم إضافة الموظف', 'success'); };
+  const handleUpdateStaff = (id, updatedData) => { setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s)); showSwal('تم تحديث بيانات الموظف', 'success'); };
+  const handleDeleteStaff = (id) => { setStaff(prev => prev.filter(s => s.id !== id)); showSwal('تم حذف الموظف', 'warning'); };
 
-  const handleDirectStockAdd = (item) => setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]);
+  const handleDirectStockAdd = (item) => { setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]); showSwal('تم إضافة الصنف للمخزن', 'success'); };
 
   const goHome = () => setActivePage('dashboard');
 

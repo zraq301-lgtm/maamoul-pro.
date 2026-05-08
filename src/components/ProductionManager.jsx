@@ -1,22 +1,24 @@
 import React, { useState, useMemo } from 'react';
 import { Factory, ArrowLeft, RefreshCw, Save, X, Trash2 } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) => {
   const safeStock = useMemo(() => Array.isArray(stock) ? stock : [], [stock]);
-  
-  const availableMaterials = useMemo(() => 
-    safeStock.filter(item => item.category !== 'finished'), 
+
+  const availableMaterials = useMemo(() =>
+    safeStock.filter(item => item.category !== 'finished'),
     [safeStock]
   );
 
   const [showReport, setShowReport] = useState(false);
   const [finalReport, setFinalReport] = useState(null);
-  const [productionQty, setProductionQty] = useState(''); // تم تغيير القيمة الافتراضية إلى نص فارغ لتسهيل الكتابة
+  const [productionQty, setProductionQty] = useState('');
+  const [unitsPerCarton, setUnitsPerCarton] = useState('12');
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     shift: 'الأولى',
-    selectedIngredients: [] 
+    selectedIngredients: []
   });
 
   const GOLDEN_RECIPE = {
@@ -43,22 +45,24 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   };
 
   const calculateProduction = () => {
-    const qty = parseFloat(productionQty);
-    if (!qty || qty <= 0) {
-      alert("الرجاء إدخال عدد الكراتين المنتجة أولاً");
+    const cartons = parseFloat(productionQty);
+    const units = parseFloat(unitsPerCarton) || 12;
+    if (!cartons || cartons <= 0) {
+      Swal.fire({ title: 'خطأ', text: 'الرجاء إدخال عدد الكراتين المنتجة أولاً', icon: 'error', timer: 2000, showConfirmButton: false });
       return;
     }
 
+    const totalUnits = cartons * units;
     const details = formData.selectedIngredients.map(ing => {
       const ratio = GOLDEN_RECIPE[ing.name.trim()] || 0;
-      const consumed = qty * ratio;
+      const consumed = cartons * ratio;
       return {
         name: ing.name,
         consumed: consumed.toFixed(3),
       };
     });
 
-    setFinalReport({ actualQty: qty, details });
+    setFinalReport({ cartons, unitsPerCarton: units, totalUnits, details });
     setShowReport(true);
   };
 
@@ -76,18 +80,18 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
     });
 
     const productName = "معمول جاهز الفاخر";
-    const unitCost = totalProductionCost / finalReport.actualQty;
+    const unitCost = totalProductionCost / finalReport.totalUnits;
     const productIdx = updatedStock.findIndex(s => s.name === productName);
 
     if (productIdx !== -1) {
-      updatedStock[productIdx].balance += parseFloat(finalReport.actualQty);
+      updatedStock[productIdx].balance = (parseFloat(updatedStock[productIdx].balance) || 0) + finalReport.totalUnits;
       updatedStock[productIdx].price = unitCost;
     } else {
       updatedStock.push({
         id: Date.now(),
         name: productName,
-        balance: parseFloat(finalReport.actualQty),
-        unit: 'كرتونة',
+        balance: finalReport.totalUnits,
+        unit: 'وحدة',
         price: unitCost,
         category: 'finished'
       });
@@ -96,12 +100,20 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
     setStock(updatedStock);
     onSaveProduction({
       ...formData,
-      productionQty: finalReport.actualQty,
+      cartons: finalReport.cartons,
+      unitsPerCarton: finalReport.unitsPerCarton,
+      totalUnits: finalReport.totalUnits,
       totalCost: totalProductionCost,
       details: finalReport.details
     });
 
-    alert(`✅ تم تسجيل إنتاج ${finalReport.actualQty} كرتونة وخصم المواد الخام.`);
+    Swal.fire({
+      title: 'تم تسجيل الإنتاج',
+      html: `تم إنتاج <b>${finalReport.cartons}</b> كرتونة × <b>${finalReport.unitsPerCarton}</b> وحدة = <b>${finalReport.totalUnits}</b> وحدة<br>وتم خصم المواد الخام وإضافة المنتج للمخزن`,
+      icon: 'success',
+      timer: 3000,
+      showConfirmButton: false
+    });
     onBack();
   };
 
@@ -119,14 +131,30 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
         <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', fontSize: '1.1rem' }}>
           كم كرتونة تم إنتاجها اليوم؟
         </label>
-        <input 
-          type="number" 
+        <input
+          type="number"
           inputMode="decimal"
-          value={productionQty} 
+          value={productionQty}
           onChange={(e) => setProductionQty(e.target.value)}
           style={ingInputCustom}
           placeholder="إضغط هنا للكتابة..."
         />
+        <label style={{ display: 'block', marginTop: '15px', marginBottom: '10px', fontWeight: 'bold', fontSize: '1rem', color: '#475569' }}>
+          عدد الوحدات في الكرتونة الواحدة
+        </label>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={unitsPerCarton}
+          onChange={(e) => setUnitsPerCarton(e.target.value)}
+          style={{ ...ingInputCustom, fontSize: '1.4rem' }}
+          placeholder="12"
+        />
+        {productionQty && unitsPerCarton && (
+          <div style={{ marginTop: '12px', padding: '10px', background: '#f0fdf4', borderRadius: '10px', textAlign: 'center', fontWeight: 'bold', color: '#1e5631' }}>
+            إجمالي الوحدات = {parseFloat(productionQty) * (parseFloat(unitsPerCarton) || 12)} وحدة
+          </div>
+        )}
       </div>
 
       <div style={{ background: '#fff', padding: '15px', borderRadius: '15px', marginBottom: '20px' }}>
@@ -160,8 +188,9 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
           <div style={modalContent}>
              <h3>تأكيد ترحيل الإنتاج</h3>
              <div style={resultBadge}>
-                <p>سيتم إضافة <b>{finalReport.actualQty}</b> كرتونة للمخزن</p>
-                <small>وسيتم خصم المكونات التالية بناءً على المعيار</small>
+                <p>سيتم إضافة <b>{finalReport.totalUnits}</b> وحدة للمخزن</p>
+                <small>({finalReport.cartons} كرتونة × {finalReport.unitsPerCarton} وحدة)</small>
+                <br /><small>وسيتم خصم المكونات التالية بناءً على المعيار</small>
              </div>
 
              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
