@@ -1,27 +1,34 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileSpreadsheet, ArrowRight, Plus, Trash2, Package, Archive, Layers, Activity, AlertTriangle, Table, LayoutGrid } from 'lucide-react';
+import { 
+  FileSpreadsheet, ArrowRight, Plus, Trash2, Package, Archive, 
+  Layers, Activity, AlertTriangle, Table, LayoutGrid, TrendingUp, 
+  DollarSign, BarChart3, Save, X 
+} from 'lucide-react';
 import DataGrid from './DataGrid';
+import Swal from 'sweetalert2';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateItem, setStock }) => {
   const [activeTab, setActiveTab] = useState('raw');
-  const [viewMode, setViewMode] = useState('table');
+  const [viewMode, setViewMode] = useState('grid'); // جعلنا عرض البطاقات هو الافتراضي للذكاء
   const [gridData, setGridData] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
-  const totalActualStock = useMemo(() => {
-    return gridData.reduce((sum, item) => sum + (parseFloat(item.balance) || 0), 0);
-  }, [gridData]);
-
-  const createEmptyRow = () => ({
-    id: `new-${Math.random().toString(36).substr(2, 9)}`,
+  // حالة النموذج الجديد لإضافة صنف
+  const [newItem, setNewItem] = useState({
     name: '',
-    date: new Date().toISOString().split('T')[0],
-    unit: '',
+    unit: 'كيلو',
     balance: '',
     price: '',
-    total: 0,
-    isNew: true
+    category: 'raw'
   });
+
+  // حسابات إحصائية بنظام ERP
+  const stats = useMemo(() => {
+    const totalValue = gridData.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+    const lowStockCount = gridData.filter(item => parseFloat(item.balance) < 5 && item.name).length;
+    return { totalValue, lowStockCount };
+  }, [gridData]);
 
   useEffect(() => {
     const lowStockItems = gridData.filter(item =>
@@ -37,181 +44,196 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
       : safeCategories.filter(cat => cat.name && (cat.name.includes("معمول") || cat.name.includes("جاهز")));
 
     const initialRows = filtered.map(cat => ({
-      id: cat.id,
-      name: cat.name || '',
-      date: cat.date || new Date().toISOString().split('T')[0],
-      unit: cat.unit || '',
-      balance: cat.balance || '',
-      price: cat.price || '',
+      ...cat,
       total: (parseFloat(cat.balance) || 0) * (parseFloat(cat.price) || 0),
-      isNew: false
     }));
 
-    if (activeTab === 'raw') {
-      setGridData([...initialRows, ...Array(5).fill(null).map(createEmptyRow)]);
-    } else {
-      setGridData(initialRows);
-    }
+    setGridData(initialRows);
   }, [activeTab, categories]);
 
-  const handleCellChange = (id, field, value) => {
-    setGridData(prev => prev.map(item => {
-      if (item.id === id) {
-        const updatedItem = { ...item, [field]: value };
-        if (field === 'balance' || field === 'price') {
-          const b = field === 'balance' ? parseFloat(value) : parseFloat(item.balance);
-          const p = field === 'price' ? parseFloat(value) : parseFloat(item.price);
-          updatedItem.total = (b || 0) * (p || 0);
-        }
-        if (onUpdateItem) onUpdateItem(updatedItem);
-        return updatedItem;
-      }
-      return item;
-    }));
-  };
-
-  const handleDeleteProcess = (id) => {
-    if (window.confirm("هل أنت متأكد من حذف هذا الصنف نهائياً؟")) {
-      if (onDeleteItem) onDeleteItem(id);
-      setGridData(prev => prev.filter(item => item.id !== id));
+  // دالة الحفظ الجديدة للمزامنة مع App.jsx والقاعدة
+  const handleAddNewItem = () => {
+    if (!newItem.name || !newItem.balance || !newItem.price) {
+      Swal.fire({ title: 'نقص بيانات', text: 'يرجى ملء جميع الحقول الأساسية', icon: 'warning', timer: 2000 });
+      return;
     }
+
+    const itemToAdd = {
+      ...newItem,
+      id: `item-${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      balance: parseFloat(newItem.balance),
+      price: parseFloat(newItem.price),
+      total: parseFloat(newItem.balance) * parseFloat(newItem.price)
+    };
+
+    // إرسال البيانات للأب (App.jsx) ليقوم بحفظها في localStorage أو قاعدة البيانات
+    if (onAddItem) {
+      onAddItem(itemToAdd);
+    } else if (setStock) {
+      setStock(prev => [...prev, itemToAdd]);
+    }
+
+    Swal.fire({ title: 'تمت الإضافة', text: 'تم تسجيل الصنف بنجاح في المخزن', icon: 'success', timer: 1500 });
+    setIsAddModalOpen(false);
+    setNewItem({ name: '', unit: 'كيلو', balance: '', price: '', category: 'raw' });
   };
 
-  const extendSheet = () => {
-    setGridData(prev => [...prev, ...Array(5).fill(null).map(createEmptyRow)]);
-  };
+  // بطاقة المنتج الذكية (ERP Card)
+  const ProductCard = ({ item }) => (
+    <div className="glass-card" style={cardStyle}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+        <div style={{ background: '#1e563120', padding: '10px', borderRadius: '12px' }}>
+          <Package size={20} color="#1e5631" />
+        </div>
+        <button onClick={() => handleDeleteProcess(item.id)} style={{ border: 'none', background: 'none', color: '#ef4444' }}>
+          <Trash2 size={18} />
+        </button>
+      </div>
+      
+      <h3 style={{ margin: '0 0 5px 0', fontSize: '1rem', fontWeight: 'bold' }}>{item.name}</h3>
+      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>وحدة القياس: {item.unit}</span>
 
-  const handleCellEdit = (rowId, colKey, value) => {
-    handleCellChange(rowId, colKey, value);
-  };
+      <div style={cardGridStyle}>
+        <div>
+          <p style={labelSmall}>الرصيد</p>
+          <p style={{ ...valueMedium, color: parseFloat(item.balance) < 5 ? '#ef4444' : '#1e293b' }}>
+            {item.balance}
+          </p>
+        </div>
+        <div>
+          <p style={labelSmall}>التكلفة/وحدة</p>
+          <p style={valueMedium}>{parseFloat(item.price).toLocaleString()} ج.م</p>
+        </div>
+      </div>
 
-  const handleBulkDelete = (ids) => {
-    if (!setStock) return;
-    setStock(prev => prev.filter(item => !ids.includes(item.id)));
-  };
-
-  const gridColumns = [
-    { key: 'name', header: 'اسم الصنف', editable: true },
-    { key: 'balance', header: 'الرصيد', editable: true, type: 'number', render: v => v?.toLocaleString() },
-    { key: 'unit', header: 'الوحدة', editable: true },
-    { key: 'price', header: 'السعر', editable: true, type: 'number', render: v => v?.toLocaleString() },
-    {
-      key: 'total', header: 'قيمة المخزون', editable: false,
-      render: (_, row) => ((parseFloat(row.balance) || 0) * (parseFloat(row.price) || 0)).toLocaleString()
-    },
-    {
-      key: 'status', header: 'الحالة', editable: false,
-      render: (_, row) => {
-        const balance = parseFloat(row.balance) || 0;
-        if (balance <= 0) return 'منتهي';
-        if (balance < 5) return 'منخفض';
-        return 'متوفر';
-      }
-    },
-  ];
+      <div style={cardFooterStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <DollarSign size={14} />
+          <span>إجمالي القيمة:</span>
+        </div>
+        <span style={{ fontWeight: 'bold' }}>{(item.balance * item.price).toLocaleString()} ج.م</span>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', paddingBottom: '120px' }}>
+      
+      {/* قسم الإحصائيات الذكي */}
+      <div style={statsContainer}>
+        <div style={statBox}>
+          <BarChart3 size={20} color="#1e5631" />
+          <div style={{ marginRight: '10px' }}>
+            <p style={labelSmall}>قيمة المخزون</p>
+            <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>{stats.totalValue.toLocaleString()} ج.م</p>
+          </div>
+        </div>
+        <div style={{ ...statBox, borderRight: '4px solid #ef4444' }}>
+          <TrendingUp size={20} color="#ef4444" />
+          <div style={{ marginRight: '10px' }}>
+            <p style={labelSmall}>أصناف منخفضة</p>
+            <p style={{ fontWeight: 'bold', fontSize: '1rem' }}>{stats.lowStockCount} صنف</p>
+          </div>
+        </div>
+      </div>
 
-      {alerts.length > 0 && (
-        <div style={{ background: 'rgba(254, 226, 226, 0.8)', borderRight: '5px solid #ef4444', padding: '12px', borderRadius: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <AlertTriangle color="#ef4444" size={20} />
-          <marquee style={{ fontSize: '0.85rem', color: '#991b1b', fontWeight: 'bold' }}>
-            تنبيه نقص مخزن: {alerts.map(a => `${a.name} (${a.balance})`).join(' | ')} - يرجى طلب توريد فوري!
-          </marquee>
+      {/* الرأس والأزرار */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900' }}>المستودع الذكي</h2>
+        <button onClick={() => setIsAddModalOpen(true)} style={addBtnMain}>
+          <Plus size={20} /> إضافة صنف جديد
+        </button>
+      </div>
+
+      {/* تبديل التبويبات */}
+      <div style={tabContainer}>
+        <button onClick={() => setActiveTab('raw')} style={activeTab === 'raw' ? activeTabStyle : tabStyle}>
+          <Layers size={18} /> المواد الخام
+        </button>
+        <button onClick={() => setActiveTab('finished')} style={activeTab === 'finished' ? activeTabStyle : tabStyle}>
+          <Archive size={18} /> المنتج النهائي
+        </button>
+      </div>
+
+      {/* عرض البيانات */}
+      {viewMode === 'grid' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
+          {gridData.map(item => <ProductCard key={item.id} item={item} />)}
+          {gridData.length === 0 && <p style={{ textAlign: 'center', color: '#94a3b8', gridColumn: '1/-1' }}>لا توجد بيانات متاحة حالياً</p>}
+        </div>
+      ) : (
+        <div className="glass-card" style={{ padding: '10px' }}>
+           <DataGrid data={gridData} columns={gridColumns} onCellEdit={handleCellEdit} />
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ background: '#1e5631', color: '#fff', padding: '12px', borderRadius: '15px' }}>
-            {activeTab === 'raw' ? <FileSpreadsheet size={24} /> : <Package size={24} />}
-          </div>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900', color: '#1e293b' }}>
-              {activeTab === 'raw' ? 'مخزن المواد الخام' : 'طلبيات المنتج النهائي'}
-            </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
-              <Activity size={14} color="#1e5631" />
-              <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e5631' }}>
-                الرصيد الفعلي: {totalActualStock.toLocaleString()}
-              </span>
+      {/* نافذة إضافة منتج (ERP Modal) */}
+      {isAddModalOpen && (
+        <div style={modalOverlay}>
+          <div className="glass-card" style={modalContent}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0 }}>تخزين صنف جديد</h3>
+              <X onClick={() => setIsAddModalOpen(false)} style={{ cursor: 'pointer' }} />
             </div>
+            
+            <div style={formGroup}>
+              <label style={labelSmall}>اسم الصنف</label>
+              <input 
+                style={inputStyle} 
+                value={newItem.name} 
+                onChange={e => setNewItem({...newItem, name: e.target.value})}
+                placeholder="مثال: دقيق فاخر"
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={formGroup}>
+                <label style={labelSmall}>الكمية</label>
+                <input 
+                  type="number" 
+                  style={inputStyle} 
+                  value={newItem.balance} 
+                  onChange={e => setNewItem({...newItem, balance: e.target.value})}
+                />
+              </div>
+              <div style={formGroup}>
+                <label style={labelSmall}>سعر الوحدة</label>
+                <input 
+                  type="number" 
+                  style={inputStyle} 
+                  value={newItem.price} 
+                  onChange={e => setNewItem({...newItem, price: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <button onClick={handleAddNewItem} style={saveBtn}>
+              <Save size={18} /> حفظ وتحديث القاعدة
+            </button>
           </div>
-        </div>
-        <button onClick={onBack} style={{ background: '#fff', border: 'none', width: '40px', height: '40px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          <ArrowRight size={22} color="#1e293b" />
-        </button>
-      </div>
-
-      <div style={{ display: 'flex', background: '#e2e8f0', padding: '5px', borderRadius: '15px', marginBottom: '20px' }}>
-        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '11px', border: 'none', backgroundColor: activeTab === 'raw' ? '#fff' : 'transparent', color: activeTab === 'raw' ? '#1e5631' : '#64748b', fontWeight: 'bold', fontFamily: "'Tajawal', sans-serif", cursor: 'pointer' }}>
-          <Layers size={18} style={{ marginLeft: '8px', verticalAlign: 'middle' }} /> المواد الخام
-        </button>
-        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '11px', border: 'none', backgroundColor: activeTab === 'finished' ? '#fff' : 'transparent', color: activeTab === 'finished' ? '#1e5631' : '#64748b', fontWeight: 'bold', fontFamily: "'Tajawal', sans-serif", cursor: 'pointer' }}>
-          <Archive size={18} style={{ marginLeft: '8px', verticalAlign: 'middle' }} /> المنتج النهائي
-        </button>
-      </div>
-
-      <div className="view-toggle" style={{ marginBottom: '16px' }}>
-        <button className={`view-toggle-btn ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')}>
-          <Table size={14} style={{ display: 'inline', marginLeft: '4px' }} /> عرض جدول
-        </button>
-        <button className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')}>
-          <LayoutGrid size={14} style={{ display: 'inline', marginLeft: '4px' }} /> عرض بطاقات
-        </button>
-      </div>
-
-      {viewMode === 'grid' ? (
-        <div className="glass-card" style={{ padding: '12px' }}>
-          <DataGrid
-            columns={gridColumns}
-            data={gridData.filter(r => r.name)}
-            onCellEdit={handleCellEdit}
-            onBulkDelete={setStock ? handleBulkDelete : undefined}
-            exportFileName="مخزون_المستودع"
-            editable={!!setStock}
-          />
-        </div>
-      ) : (
-        <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
-              <thead>
-                <tr style={{ background: '#1e5631', color: 'white' }}>
-                  <th style={{ padding: '12px', width: '40px' }}>#</th>
-                  <th style={{ padding: '12px', textAlign: 'right' }}>الصنف</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>الوحدة</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>الكمية</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>السعر</th>
-                  <th style={{ padding: '12px', textAlign: 'center' }}>الإجمالي</th>
-                  <th style={{ padding: '12px', textAlign: 'center', width: '50px' }}>حذف</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gridData.map((row, idx) => (
-                  <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9', background: row.isNew ? 'rgba(240,253,244,0.5)' : (idx % 2 === 0 ? '#fff' : '#f9fafb') }}>
-                    <td style={{ padding: '8px', textAlign: 'center', color: '#94a3b8', fontSize: '0.8rem' }}>{idx + 1}</td>
-                    <td style={{ padding: '4px' }}><input value={row.name} onChange={e => handleCellChange(row.id, 'name', e.target.value)} placeholder="اسم الصنف..." style={{ width: '100%', border: 'none', background: 'transparent', padding: '8px', fontFamily: "'Tajawal', sans-serif", fontSize: '0.9rem', outline: 'none' }} /></td>
-                    <td style={{ padding: '4px' }}><input value={row.unit} onChange={e => handleCellChange(row.id, 'unit', e.target.value)} placeholder="كيلو" style={{ width: '80px', border: 'none', background: 'transparent', padding: '8px', textAlign: 'center', fontFamily: "'Tajawal', sans-serif", fontSize: '0.9rem', outline: 'none' }} /></td>
-                    <td style={{ padding: '4px' }}><input type="number" inputMode="decimal" value={row.balance} onChange={e => handleCellChange(row.id, 'balance', e.target.value)} placeholder="0" style={{ width: '80px', border: 'none', background: 'transparent', padding: '8px', textAlign: 'center', fontFamily: "'Tajawal', sans-serif", fontSize: '0.9rem', outline: 'none', direction: 'ltr' }} /></td>
-                    <td style={{ padding: '4px' }}><input type="number" inputMode="decimal" value={row.price} onChange={e => handleCellChange(row.id, 'price', e.target.value)} placeholder="0" style={{ width: '80px', border: 'none', background: 'transparent', padding: '8px', textAlign: 'center', fontFamily: "'Tajawal', sans-serif", fontSize: '0.9rem', outline: 'none', direction: 'ltr' }} /></td>
-                    <td style={{ padding: '8px', textAlign: 'center', fontWeight: 'bold', color: '#1e5631' }}>{row.total?.toLocaleString() || 0}</td>
-                    <td style={{ padding: '4px', textAlign: 'center' }}>
-                      <button onClick={() => handleDeleteProcess(row.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}><Trash2 size={16} /></button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <button onClick={extendSheet} style={{ width: '100%', padding: '12px', border: 'none', background: '#f0fdf4', color: '#1e5631', fontWeight: 'bold', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-            <Plus size={18} /> إضافة 5 صفوف جديدة
-          </button>
         </div>
       )}
     </div>
   );
 };
+
+// الستايلات المضافة (ERP Style)
+const statsContainer = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };
+const statBox = { background: '#fff', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderRight: '4px solid #1e5631' };
+const labelSmall = { fontSize: '0.7rem', color: '#64748b', margin: 0 };
+const valueMedium = { fontSize: '1rem', fontWeight: 'bold', margin: 0 };
+const cardStyle = { background: '#fff', padding: '15px', borderRadius: '20px', boxShadow: '0 10px 20px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9' };
+const cardGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '15px', padding: '10px 0', borderTop: '1px dashed #e2e8f0' };
+const cardFooterStyle = { marginTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#1e5631', background: '#f0fdf4', padding: '8px', borderRadius: '10px' };
+const tabContainer = { display: 'flex', background: '#e2e8f0', padding: '5px', borderRadius: '15px', marginBottom: '20px' };
+const tabStyle = { flex: 1, padding: '10px', border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' };
+const activeTabStyle = { ...tabStyle, background: '#fff', color: '#1e5631', fontWeight: 'bold', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' };
+const addBtnMain = { background: '#1e5631', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 'bold' };
+const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' };
+const modalContent = { background: '#fff', width: '100%', maxWidth: '400px', padding: '25px', borderRadius: '25px' };
+const formGroup = { marginBottom: '15px', display: 'flex', flexDirection: 'column', gap: '5px' };
+const inputStyle = { padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', outline: 'none', fontSize: '0.9rem' };
+const saveBtn = { width: '100%', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' };
 
 export default Inventory;
