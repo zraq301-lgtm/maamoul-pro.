@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { Box, Layers, AlertCircle, ArrowRight, Plus, Trash2, Calendar, Package, Table as TableIcon, LayoutGrid, X, FileSpreadsheet } from 'lucide-react';
+import { Box, Layers, AlertCircle, ArrowRight, Plus, Trash2, Calendar, Package, Table as TableIcon, LayoutGrid, X, FileSpreadsheet, ExternalLink } from 'lucide-react';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   const [activeTab, setActiveTab] = useState('raw');
-  const [viewMode, setViewMode] = useState('table'); 
+  const [viewMode, setViewMode] = useState('table'); // افتراضياً عرض شيت الإكسل
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', balance: '', price: '', unit: 'وحدة' });
+
+  // ضع رابط شيت الإكسل الخاص بك هنا
+  const excelSheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSXXXXXXXXXXXX/pubhtml?widget=true&headers=false";
 
   const safeCategories = Array.isArray(categories) ? categories : [];
   const rawMaterials = safeCategories.filter(cat => cat.name && !cat.name.includes("معمول") && !cat.name.includes("جاهز"));
@@ -30,104 +33,102 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
             <X size={24} color="#000" />
           </button>
           <div style={{ textAlign: 'right' }}>
-            <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: '900', color: '#000', display: 'flex', alignItems: 'center', gap: '10px' }}>
-              عرض البيانات المجدولة <FileSpreadsheet color="#1e5631" size={28} />
+            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#000', display: 'flex', alignItems: 'center', gap: '10px' }}>
+               سجل البيانات المتكامل <FileSpreadsheet color="#1e5631" size={24} />
             </h2>
           </div>
         </div>
       </div>
 
-      {/* التبديل بين الأقسام */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+      {/* أزرار التحكم والتبديل */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
         <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'raw' ? '#1e5631' : '#f1f5f9', color: activeTab === 'raw' ? '#fff' : '#64748b', fontWeight: 'bold' }}>مواد خام</button>
         <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'finished' ? '#1e5631' : '#f1f5f9', color: activeTab === 'finished' ? '#fff' : '#64748b', fontWeight: 'bold' }}>منتج نهائي</button>
-        <button onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff' }}>
+        <button onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: viewMode === 'table' ? '#e8f5e9' : '#fff', color: '#1e5631' }}>
             {viewMode === 'cards' ? <TableIcon size={20} /> : <LayoutGrid size={20} />}
         </button>
       </div>
 
-      {/* المحتوى الرئيسي */}
-      {viewMode === 'table' ? (
-        /* عرض الإكسل المماثل للصورة */
-        <div style={{ border: '2px solid #e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center' }}>
-            <thead>
-              <tr style={{ background: '#1e5631', color: '#fff' }}>
-                <th style={{ padding: '12px', border: '1px solid #fff' }}>التاريخ</th>
-                <th style={{ padding: '12px', border: '1px solid #fff' }}>البيان</th>
-                <th style={{ padding: '12px', border: '1px solid #fff' }}>النوع</th>
-                <th style={{ padding: '12px', border: '1px solid #fff' }}>المبلغ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentDisplay.map((cat, index) => (
-                <tr key={cat.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '12px', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}>
-                    {cat.batches?.[0]?.date || '2026/5/8'}
-                  </td>
-                  <td style={{ padding: '12px', border: '1px solid #e2e8f0' }}>{cat.name}</td>
-                  <td style={{ padding: '12px', border: '1px solid #e2e8f0', color: 'red' }}>صادر</td>
-                  <td style={{ padding: '12px', border: '1px solid #e2e8f0', fontWeight: 'bold' }}>
-                    {isNaN(cat.price) ? <span style={{fontSize:'0.8rem'}}>ليس رقم</span> : cat.price * cat.balance}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        /* العرض العادي (نظام الكروت) */
-        <div style={{ display: 'grid', gap: '20px' }}>
-          {currentDisplay.map(cat => (
-            <div key={cat.id} style={{ background: '#fff', borderRadius: '25px', padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', borderLeft: '6px solid #3498db', position: 'relative' }}>
-               <button onClick={() => onDeleteItem(cat.id)} style={{ position: 'absolute', top: '15px', left: '15px', background: '#fee2e2', border: 'none', padding: '8px', borderRadius: '10px', color: '#ef4444' }}><Trash2 size={18} /></button>
-               <h3 style={{ margin: '0 0 15px 0', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.4rem' }}>
-                  <Box color="#3498db" /> {cat.name}
-               </h3>
-               <div style={{ display: 'flex', gap: '15px' }}>
-                  <div style={{ flex: 1, background: '#f8fafc', padding: '15px', borderRadius: '15px', textAlign: 'center' }}>
-                     <div style={{ color: '#64748b', fontSize: '0.8rem' }}>الرصيد</div>
-                     <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cat.balance} {cat.unit}</div>
-                  </div>
-                  <div style={{ flex: 1, background: '#f8fafc', padding: '15px', borderRadius: '15px', textAlign: 'center' }}>
-                     <div style={{ color: '#64748b', fontSize: '0.8rem' }}>السعر (متوسط)</div>
-                     <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>{cat.price} ج.م</div>
-                  </div>
+      {/* منطقة العرض الرئيسية */}
+      <div style={{ minHeight: '60vh' }}>
+        {viewMode === 'table' ? (
+          /* دمج شيت الإكسل المرفوع بدلاً من الجدول العادي */
+          <div style={{ width: '100%', height: '70vh', border: '2px solid #1e5631', borderRadius: '15px', overflow: 'hidden', backgroundColor: '#f8fafc', position: 'relative' }}>
+             <div style={{ background: '#1e5631', color: '#fff', padding: '8px 15px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>جاري عرض قاعدة بيانات ERP المتزامنة</span>
+                <ExternalLink size={14} onClick={() => window.open(excelSheetUrl, '_blank')} style={{cursor: 'pointer'}} />
+             </div>
+             <iframe 
+                src={excelSheetUrl}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                title="ERP Excel Sheet"
+             ></iframe>
+          </div>
+        ) : (
+          /* العرض العادي (نظام الكروت الاحترافي) */
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {currentDisplay.length === 0 ? (
+               <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>
+                  <AlertCircle size={40} style={{ marginBottom: '10px' }} />
+                  <p>لا توجد بيانات مسجلة في هذا القسم</p>
                </div>
-               {/* سجل الشحنات المجدولة */}
-               <div style={{ marginTop: '15px', padding: '12px', background: '#eff6ff', borderRadius: '12px', border: '1px dashed #3b82f6' }}>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#1e40af', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                     <Package size={16} /> سجل الشحنات (ERP):
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                     <span>📅 {cat.batches?.[0]?.date || '2026-05-07'}</span>
-                     <span>الكمية: {cat.balance}</span>
-                     <span>التكلفة: {cat.price}</span>
-                  </div>
-               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ) : (
+               currentDisplay.map(cat => (
+                  <div key={cat.id} style={{ background: '#fff', borderRadius: '25px', padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', borderRight: '6px solid #1e5631' }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                        <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '800' }}>{cat.name}</h3>
+                        <button onClick={() => onDeleteItem(cat.id)} style={{ background: '#fee2e2', border: 'none', padding: '8px', borderRadius: '10px', color: '#ef4444' }}><Trash2 size={18} /></button>
+                     </div>
+                     
+                     <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                        <div style={{ flex: 1, background: '#f8fafc', padding: '12px', borderRadius: '15px', textAlign: 'center' }}>
+                           <div style={{ color: '#64748b', fontSize: '0.75rem' }}>الرصيد</div>
+                           <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e5631' }}>{cat.balance} {cat.unit}</div>
+                        </div>
+                        <div style={{ flex: 1, background: '#f8fafc', padding: '12px', borderRadius: '15px', textAlign: 'center' }}>
+                           <div style={{ color: '#64748b', fontSize: '0.75rem' }}>التكلفة</div>
+                           <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e5631' }}>{cat.price} ج.م</div>
+                        </div>
+                     </div>
 
-      {/* زر الإضافة العائم */}
-      <button onClick={() => setShowAddModal(true)} style={{ position: 'fixed', bottom: '100px', right: '20px', background: '#1e5631', color: '#fff', border: 'none', width: '60px', height: '60px', borderRadius: '50%', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     <div style={{ padding: '10px', background: '#f0fdf4', borderRadius: '12px', border: '1px dashed #1e5631' }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#1e5631', marginBottom: '5px' }}>آخر حركة مجدولة:</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#475569' }}>
+                           <span>📅 {cat.batches?.[0]?.date || '2026/05/08'}</span>
+                           <span>الحالة: <b style={{color: 'red'}}>صادر</b></span>
+                        </div>
+                     </div>
+                  </div>
+               ))
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* زر الإضافة العائم والمودال */}
+      <button onClick={() => setShowAddModal(true)} style={{ position: 'fixed', bottom: '100px', right: '20px', background: '#1e5631', color: '#fff', border: 'none', width: '60px', height: '60px', borderRadius: '50%', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
         <Plus size={30} />
       </button>
 
-      {/* مودال الإضافة */}
       {showAddModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-          <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '25px', padding: '25px' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', backdropFilter: 'blur(4px)' }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '30px', padding: '30px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0 }}>إضافة صنف</h3>
-              <X onClick={() => setShowAddModal(false)} style={{ cursor: 'pointer' }} />
+              <h3 style={{ margin: 0, fontWeight: '900' }}>إضافة بيانات جديدة</h3>
+              <X onClick={() => setShowAddModal(false)} style={{ cursor: 'pointer', color: '#64748b' }} />
             </div>
             <form onSubmit={handleLocalSubmit} style={{ display: 'grid', gap: '15px' }}>
-              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd' }} type="text" placeholder="اسم الصنف" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} required />
-              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd' }} type="number" placeholder="الكمية" value={newItem.balance} onChange={(e) => setNewItem({...newItem, balance: e.target.value})} required />
-              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #ddd' }} type="number" placeholder="السعر" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} />
-              <button type="submit" style={{ background: '#1e5631', color: '#fff', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: 'bold' }}>حفظ البيانات</button>
+              <input style={{ padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} type="text" placeholder="اسم المادة / الصنف" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} required />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }} type="number" placeholder="الكمية" value={newItem.balance} onChange={(e) => setNewItem({...newItem, balance: e.target.value})} required />
+                <select style={{ padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff' }} value={newItem.unit} onChange={(e) => setNewItem({...newItem, unit: e.target.value})}>
+                  <option value="كيلو">كيلو</option>
+                  <option value="قطعة">قطعة</option>
+                  <option value="جرام">جرام</option>
+                </select>
+              </div>
+              <input style={{ padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }} type="number" placeholder="سعر التكلفة" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} />
+              <button type="submit" style={{ background: '#1e5631', color: '#fff', border: 'none', padding: '16px', borderRadius: '15px', fontWeight: 'bold', fontSize: '1rem', marginTop: '10px' }}>تحديث النظام</button>
             </form>
           </div>
         </div>
