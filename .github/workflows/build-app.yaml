@@ -27,37 +27,37 @@ jobs:
       - name: 3. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # إصدار 20 هو الأكثر استقراراً لـ Vite 6 و Capacitor حالياً
-          cache: 'npm'
+          node-version: '20'
+          # تم حذف سطر cache: 'npm' لتجنب خطأ فقدان ملف package-lock.json
 
       - name: 4. Install Dependencies & Build Web
         run: |
-          # تنظيف البيئة لضمان عدم وجود ملفات تالفة
+          # تنظيف شامل للمجلدات لضمان بناء جديد كلياً
           rm -rf node_modules package-lock.json dist www
           npm install --legacy-peer-deps
-          # بناء نسخة الويب أولاً
+          # بناء ملفات الويب التي سيستخدمها Capacitor
           npm run build
 
       - name: 5. Capacitor Preparation
         run: |
-          # التأكد من وجود مجلد www قبل محاولة الربط مع أندرويد
+          # إنشاء المجلد المطلوب يدوياً للتأكد من وجوده
           mkdir -p www
-          # تركيب Capacitor CLI محلياً لضمان وجود الـ Executable
+          # تثبيت أدوات Capacitor محلياً لضمان وجود الأوامر التنفيذية
           npm install @capacitor/cli @capacitor/core @capacitor/android --legacy-peer-deps
           
-          # إضافة منصة أندرويد إذا لم تكن موجودة
+          # إضافة منصة أندرويد إذا لم تكن مضافة مسبقاً في المستودع
           if [ ! -d "android" ]; then
             npx cap add android
           fi
           
-          # مزامنة الملفات من www إلى مجلد أندرويد
+          # مزامنة الملفات من www إلى مجلد أندرويد الأصلي
           npx cap copy android
           npx cap sync android
 
       - name: 6. Inject Firebase & App Identity
         shell: bash
         run: |
-          # حقن ملف جوجل سيرفس في المسار الصحيح
+          # حقن ملف google-services.json
           mkdir -p android/app/
           cat <<EOF > android/app/google-services.json
           {
@@ -67,7 +67,7 @@ jobs:
           }
           EOF
 
-          # تعديل هوية التطبيق (الاسم وحزمة الحماية)
+          # تعديل هوية التطبيق (اسم التطبيق وحزمة التعريف)
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
           
@@ -81,16 +81,15 @@ jobs:
       - name: 7. Generate Icons & Assets
         run: |
           npm install @capacitor/assets --save-dev --legacy-peer-deps
-          # التأكد من وجود أيقونة المصدر قبل التوليد (افترض وجودها في resources/icon.png)
-          # إذا لم تكن موجودة سيتجاوز الخطوة لتجنب الانهيار
-          npx capacitor-assets generate --android || echo "Icons generation skipped - source not found"
+          # توليد الأيقونات (سوف يتجاوز هذه الخطوة إذا لم يجد ملفات المصدر بدلاً من الانهيار)
+          npx capacitor-assets generate --android || echo "Icons generation skipped"
 
-      - name: 8. Fix Dependencies & Native Build
+      - name: 8. Native Android Build
         run: |
           cd android
           chmod +x gradlew
           
-          # حل مشكلة مكتبة bcprov وإجبار Gradle على النسخة المستقرة
+          # حل مشكلة تضارب مكتبة bcprov وإجبار Gradle على استخدام النسخة المستقرة
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
           
           ./gradlew clean
@@ -98,17 +97,17 @@ jobs:
 
       - name: 9. Sign APK
         run: |
-          # إنشاء مفتاح التوقيع
+          # توليد مفتاح توقيع مؤقت لعملية البناء الحالية
           keytool -genkey -v -keystore mamoul.jks -alias mamoul_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" -dname "CN=MamoulApp, O=Mamoul, C=EG"
           
-          # البحث عن أداة التوقيع والـ APK
+          # العثور على أداة apksigner وملف الـ APK الناتج
           APKSIGNER=$(find $ANDROID_HOME/build-tools -name apksigner | sort -r | head -n 1)
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
           
-          # التوقيع النهائي
+          # التوقيع النهائي للملف
           $APKSIGNER sign --ks mamoul.jks --ks-pass pass:"mamoul_pass_2026" --out Mamoul-Final.apk "$APK_PATH"
 
-      - name: 10. Create GitHub Release
+      - name: 10. Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
