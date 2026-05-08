@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import { Box, Layers, AlertCircle, ArrowRight, Plus, Trash2, Calendar, Package, Table as TableIcon, LayoutGrid, X, FileSpreadsheet, ExternalLink } from 'lucide-react';
+import { Box, Layers, AlertCircle, ArrowRight, Plus, Trash2, Calendar, Package, Table as TableIcon, LayoutGrid, X, FileSpreadsheet } from 'lucide-react';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   const [activeTab, setActiveTab] = useState('raw');
-  const [viewMode, setViewMode] = useState('table'); // افتراضياً عرض شيت الإكسل
+  const [viewMode, setViewMode] = useState('table'); 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', balance: '', price: '', unit: 'وحدة' });
-
-  // ضع رابط شيت الإكسل الخاص بك هنا
-  const excelSheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSXXXXXXXXXXXX/pubhtml?widget=true&headers=false";
 
   const safeCategories = Array.isArray(categories) ? categories : [];
   const rawMaterials = safeCategories.filter(cat => cat.name && !cat.name.includes("معمول") && !cat.name.includes("جاهز"));
@@ -24,111 +21,114 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   };
 
   return (
-    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#fff', paddingBottom: '100px' }}>
+    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#f1f5f9', paddingBottom: '100px' }}>
       
-      {/* الهيدر العلوي */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button onClick={onBack} style={{ background: '#f1f5f9', border: 'none', padding: '12px', borderRadius: '50%', cursor: 'pointer' }}>
-            <X size={24} color="#000" />
-          </button>
-          <div style={{ textAlign: 'right' }}>
-            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: '900', color: '#000', display: 'flex', alignItems: 'center', gap: '10px' }}>
-               سجل البيانات المتكامل <FileSpreadsheet color="#1e5631" size={24} />
-            </h2>
-          </div>
+      {/* رأس الصفحة */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+           <div style={{ background: '#1e5631', color: '#fff', padding: '8px', borderRadius: '10px' }}>
+              <FileSpreadsheet size={24} />
+           </div>
+           <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold', color: '#1e293b' }}>مخزن معمول - عرض البيانات</h2>
         </div>
+        <button onClick={onBack} style={{ background: '#fff', border: 'none', padding: '10px', borderRadius: '50%', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+          <ArrowRight size={20} />
+        </button>
       </div>
 
-      {/* أزرار التحكم والتبديل */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'raw' ? '#1e5631' : '#f1f5f9', color: activeTab === 'raw' ? '#fff' : '#64748b', fontWeight: 'bold' }}>مواد خام</button>
-        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', backgroundColor: activeTab === 'finished' ? '#1e5631' : '#f1f5f9', color: activeTab === 'finished' ? '#fff' : '#64748b', fontWeight: 'bold' }}>منتج نهائي</button>
-        <button onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} style={{ padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', background: viewMode === 'table' ? '#e8f5e9' : '#fff', color: '#1e5631' }}>
+      {/* أزرار التبديل */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '15px' }}>
+        <button onClick={() => setActiveTab('raw')} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', backgroundColor: activeTab === 'raw' ? '#1e5631' : '#fff', color: activeTab === 'raw' ? '#fff' : '#64748b', fontWeight: 'bold', transition: '0.3s' }}>المواد الخام</button>
+        <button onClick={() => setActiveTab('finished')} style={{ flex: 1, padding: '10px', borderRadius: '10px', border: 'none', backgroundColor: activeTab === 'finished' ? '#1e5631' : '#fff', color: activeTab === 'finished' ? '#fff' : '#64748b', fontWeight: 'bold', transition: '0.3s' }}>المنتج النهائي</button>
+        <button onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')} style={{ padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff' }}>
             {viewMode === 'cards' ? <TableIcon size={20} /> : <LayoutGrid size={20} />}
         </button>
       </div>
 
-      {/* منطقة العرض الرئيسية */}
-      <div style={{ minHeight: '60vh' }}>
+      {/* منطقة الجدول (الإكسل المحاكي) */}
+      <div style={{ background: '#fff', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', border: '1px solid #e2e8f0' }}>
         {viewMode === 'table' ? (
-          /* دمج شيت الإكسل المرفوع بدلاً من الجدول العادي */
-          <div style={{ width: '100%', height: '70vh', border: '2px solid #1e5631', borderRadius: '15px', overflow: 'hidden', backgroundColor: '#f8fafc', position: 'relative' }}>
-             <div style={{ background: '#1e5631', color: '#fff', padding: '8px 15px', fontSize: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>جاري عرض قاعدة بيانات ERP المتزامنة</span>
-                <ExternalLink size={14} onClick={() => window.open(excelSheetUrl, '_blank')} style={{cursor: 'pointer'}} />
-             </div>
-             <iframe 
-                src={excelSheetUrl}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-                title="ERP Excel Sheet"
-             ></iframe>
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '600px', fontSize: '0.9rem' }}>
+              <thead>
+                {/* صف الحروف (مثل إكسل) */}
+                <tr style={{ backgroundColor: '#f8fafc' }}>
+                  <th style={{ width: '40px', border: '1px solid #e2e8f0', padding: '5px', color: '#94a3b8', fontSize: '0.7rem' }}>#</th>
+                  <th style={{ border: '1px solid #e2e8f0', color: '#94a3b8' }}>A</th>
+                  <th style={{ border: '1px solid #e2e8f0', color: '#94a3b8' }}>B</th>
+                  <th style={{ border: '1px solid #e2e8f0', color: '#94a3b8' }}>C</th>
+                  <th style={{ border: '1px solid #e2e8f0', color: '#94a3b8' }}>D</th>
+                </tr>
+                {/* صف العناوين الرئيسي (الأخضر كما في الصورة) */}
+                <tr style={{ background: '#1e5631', color: '#fff' }}>
+                  <th style={{ border: '1px solid #143d22', padding: '12px' }}>ID</th>
+                  <th style={{ border: '1px solid #143d22', padding: '12px' }}>اسم المنتج (البيان)</th>
+                  <th style={{ border: '1px solid #143d22', padding: '12px' }}>التاريخ</th>
+                  <th style={{ border: '1px solid #143d22', padding: '12px' }}>الكمية</th>
+                  <th style={{ border: '1px solid #143d22', padding: '12px' }}>الإجمالي (ج.م)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentDisplay.map((cat, index) => (
+                  <tr key={cat.id} style={{ backgroundColor: index % 2 === 0 ? '#fff' : '#fcfdfe' }}>
+                    <td style={{ border: '1px solid #e2e8f0', padding: '10px', textAlign: 'center', backgroundColor: '#f8fafc', color: '#64748b' }}>{index + 1}</td>
+                    <td style={{ border: '1px solid #e2e8f0', padding: '10px', fontWeight: 'bold' }}>{cat.name}</td>
+                    <td style={{ border: '1px solid #e2e8f0', padding: '10px', textAlign: 'center' }}>{cat.batches?.[0]?.date || '2026/05/08'}</td>
+                    <td style={{ border: '1px solid #e2e8f0', padding: '10px', textAlign: 'center' }}>{cat.balance}</td>
+                    <td style={{ border: '1px solid #e2e8f0', padding: '10px', textAlign: 'center', color: '#1e5631', fontWeight: 'bold' }}>
+                        {isNaN(cat.price) ? 'خطأ رقمي' : (cat.price * cat.balance).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+                {/* صفوف فارغة لمحاكاة شكل الشيت */}
+                {[...Array(5)].map((_, i) => (
+                  <tr key={`empty-${i}`}>
+                    <td style={{ border: '1px solid #e2e8f0', padding: '15px', backgroundColor: '#f8fafc' }}>{currentDisplay.length + i + 1}</td>
+                    <td style={{ border: '1px solid #e2e8f0' }}></td>
+                    <td style={{ border: '1px solid #e2e8f0' }}></td>
+                    <td style={{ border: '1px solid #e2e8f0' }}></td>
+                    <td style={{ border: '1px solid #e2e8f0' }}></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         ) : (
-          /* العرض العادي (نظام الكروت الاحترافي) */
-          <div style={{ display: 'grid', gap: '20px' }}>
-            {currentDisplay.length === 0 ? (
-               <div style={{ textAlign: 'center', padding: '50px', color: '#94a3b8' }}>
-                  <AlertCircle size={40} style={{ marginBottom: '10px' }} />
-                  <p>لا توجد بيانات مسجلة في هذا القسم</p>
-               </div>
-            ) : (
-               currentDisplay.map(cat => (
-                  <div key={cat.id} style={{ background: '#fff', borderRadius: '25px', padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.08)', borderRight: '6px solid #1e5631' }}>
-                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '800' }}>{cat.name}</h3>
-                        <button onClick={() => onDeleteItem(cat.id)} style={{ background: '#fee2e2', border: 'none', padding: '8px', borderRadius: '10px', color: '#ef4444' }}><Trash2 size={18} /></button>
-                     </div>
-                     
-                     <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                        <div style={{ flex: 1, background: '#f8fafc', padding: '12px', borderRadius: '15px', textAlign: 'center' }}>
-                           <div style={{ color: '#64748b', fontSize: '0.75rem' }}>الرصيد</div>
-                           <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e5631' }}>{cat.balance} {cat.unit}</div>
-                        </div>
-                        <div style={{ flex: 1, background: '#f8fafc', padding: '12px', borderRadius: '15px', textAlign: 'center' }}>
-                           <div style={{ color: '#64748b', fontSize: '0.75rem' }}>التكلفة</div>
-                           <div style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#1e5631' }}>{cat.price} ج.م</div>
-                        </div>
-                     </div>
-
-                     <div style={{ padding: '10px', background: '#f0fdf4', borderRadius: '12px', border: '1px dashed #1e5631' }}>
-                        <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: '#1e5631', marginBottom: '5px' }}>آخر حركة مجدولة:</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#475569' }}>
-                           <span>📅 {cat.batches?.[0]?.date || '2026/05/08'}</span>
-                           <span>الحالة: <b style={{color: 'red'}}>صادر</b></span>
-                        </div>
-                     </div>
-                  </div>
-               ))
-            )}
+          /* عرض الكروت الاحترافي (للموبايل) */
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100%, 1fr))', gap: '15px', padding: '15px' }}>
+            {currentDisplay.map(cat => (
+              <div key={cat.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '15px', position: 'relative' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                   <span style={{ fontWeight: '900', fontSize: '1.1rem' }}>{cat.name}</span>
+                   <Package size={20} color="#1e5631" />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}>
+                   <span>الرصيد: <b>{cat.balance}</b></span>
+                   <span style={{ color: '#1e5631' }}>السعر: <b>{cat.price}</b></span>
+                </div>
+                <button onClick={() => onDeleteItem(cat.id)} style={{ marginTop: '10px', width: '100%', border: 'none', background: '#fee2e2', color: '#ef4444', padding: '8px', borderRadius: '8px' }}>حذف من المخزن</button>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      {/* زر الإضافة العائم والمودال */}
-      <button onClick={() => setShowAddModal(true)} style={{ position: 'fixed', bottom: '100px', right: '20px', background: '#1e5631', color: '#fff', border: 'none', width: '60px', height: '60px', borderRadius: '50%', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-        <Plus size={30} />
+      {/* زر الإضافة */}
+      <button onClick={() => setShowAddModal(true)} style={{ position: 'fixed', bottom: '110px', left: '20px', width: '56px', height: '56px', borderRadius: '50%', background: '#1e5631', color: '#fff', border: 'none', boxShadow: '0 4px 12px rgba(30, 86, 49, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Plus size={28} />
       </button>
 
+      {/* المودال */}
       {showAddModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '30px', padding: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0, fontWeight: '900' }}>إضافة بيانات جديدة</h3>
-              <X onClick={() => setShowAddModal(false)} style={{ cursor: 'pointer', color: '#64748b' }} />
-            </div>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div style={{ background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '20px', padding: '25px' }}>
+            <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>إدخال بيانات إكسل</h3>
             <form onSubmit={handleLocalSubmit} style={{ display: 'grid', gap: '15px' }}>
-              <input style={{ padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} type="text" placeholder="اسم المادة / الصنف" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} required />
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <input style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }} type="number" placeholder="الكمية" value={newItem.balance} onChange={(e) => setNewItem({...newItem, balance: e.target.value})} required />
-                <select style={{ padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff' }} value={newItem.unit} onChange={(e) => setNewItem({...newItem, unit: e.target.value})}>
-                  <option value="كيلو">كيلو</option>
-                  <option value="قطعة">قطعة</option>
-                  <option value="جرام">جرام</option>
-                </select>
-              </div>
-              <input style={{ padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }} type="number" placeholder="سعر التكلفة" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} />
-              <button type="submit" style={{ background: '#1e5631', color: '#fff', border: 'none', padding: '16px', borderRadius: '15px', fontWeight: 'bold', fontSize: '1rem', marginTop: '10px' }}>تحديث النظام</button>
+              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }} type="text" placeholder="اسم المنتج" value={newItem.name} onChange={(e) => setNewItem({...newItem, name: e.target.value})} required />
+              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }} type="number" placeholder="الكمية" value={newItem.balance} onChange={(e) => setNewItem({...newItem, balance: e.target.value})} required />
+              <input style={{ padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }} type="number" placeholder="سعر التكلفة" value={newItem.price} onChange={(e) => setNewItem({...newItem, price: e.target.value})} />
+              <button type="submit" style={{ background: '#1e5631', color: '#fff', padding: '15px', border: 'none', borderRadius: '12px', fontWeight: 'bold' }}>تثبيت في الجدول</button>
+              <button type="button" onClick={() => setShowAddModal(false)} style={{ background: '#f1f5f9', color: '#64748b', padding: '10px', border: 'none', borderRadius: '12px' }}>إلغاء</button>
             </form>
           </div>
         </div>
