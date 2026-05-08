@@ -53,12 +53,13 @@ const App = () => {
     }
   };
 
+  // --- API Handlers ---
   const syncWithCloud = async (collectionName, data) => {
     if (!data || (Array.isArray(data) && data.length === 0)) return;
     try {
       await httpPost('https://maamoul-pro-five.vercel.app/api/sync', { collectionName, data });
     } catch (error) {
-      // Silently fail - offline-first approach
+      console.error("Sync error:", error);
     }
   };
 
@@ -66,15 +67,14 @@ const App = () => {
     try {
       const result = await httpGet(`https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${collectionName}`);
       const parsed = CapacitorHttp ? (typeof result.data === 'string' ? JSON.parse(result.data) : result.data) : result;
+      
       if (parsed?.success && parsed?.data) {
         const cloudData = parsed.data;
-        const localData = JSON.parse(localStorage.getItem(collectionName) || '[]');
-        const finalData = cloudData.length > 0 ? cloudData : localData;
-        setter(finalData);
-        localStorage.setItem(collectionName, JSON.stringify(finalData));
+        setter(cloudData);
+        localStorage.setItem(collectionName, JSON.stringify(cloudData));
       }
     } catch (error) {
-      // Silently fail - use local data
+      console.error("Fetch error:", error);
     }
   };
 
@@ -82,10 +82,11 @@ const App = () => {
     try {
       await httpPost('https://maamoul-pro-five.vercel.app/api/delete-item', { collectionName, id });
     } catch (error) {
-      // Silently fail
+      console.error("Delete error:", error);
     }
   };
 
+  // --- States ---
   const [stock, setStock] = useState(() => loadInitial('stock', []));
   const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
   const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
@@ -98,6 +99,7 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
+  // Load from Cloud on Start
   useEffect(() => {
     const cols = ['stock', 'salesData', 'inventory', 'expenses', 'waste', 'suppliers', 'customers', 'productionData', 'waitingList', 'cashBook', 'staff'];
     const setters = {
@@ -109,6 +111,7 @@ const App = () => {
     cols.forEach(col => fetchFromCloud(col, setters[col]));
   }, []);
 
+  // Sync to Cloud and LocalStorage on Change
   useEffect(() => {
     const syncMap = {
       stock, salesData, inventory, expenses, waste, suppliers,
@@ -188,10 +191,40 @@ const App = () => {
     showSwal('تم تسجيل المصروف', 'success');
   };
 
+  // --- التعديل المطلوب: منطق الإنتاج وترحيله للمخزن كمنتج نهائي ---
   const handleSaveProduction = (production) => {
-    setProductionData(prev => [...prev, production]);
-    showSwal('تم تسجيل الإنتاج بنجاح', 'success');
+    const totalUnits = (parseFloat(production.boxes) || 0) * (parseFloat(production.unitsPerBox) || 0);
+    const finalProduction = { ...production, totalUnits, id: Date.now() };
+    
+    setProductionData(prev => [...prev, finalProduction]);
+
+    // ترحيل البيانات فوراً للمخزن كـ "منتج نهائي"
+    setStock(prev => {
+      const productName = production.productName || "منتج نهائي جديد";
+      const idx = prev.findIndex(s => s.name === productName);
+      
+      if (idx > -1) {
+        const up = [...prev];
+        up[idx] = { 
+          ...up[idx], 
+          balance: (up[idx].balance || 0) + totalUnits,
+          category: 'منتج نهائي' 
+        };
+        return up;
+      }
+      return [...prev, { 
+        id: Date.now(), 
+        name: productName, 
+        balance: totalUnits, 
+        price: 0, 
+        unit: 'وحدة', 
+        category: 'منتج نهائي' 
+      }];
+    });
+
+    showSwal(`تم إنتاج ${totalUnits} وحدة وإضافتها للمخزن`, 'success');
   };
+
   const handleOrderTrigger = (orderData) => setSupplierWaitingList(prev => [orderData, ...prev]);
   const handleAddSupplier = (supplier) => { setSuppliers(prev => [...prev, { ...supplier, debt: supplier.debt || 0 }]); showSwal('تم إضافة المورد', 'success'); };
   const handleAddCustomer = (customer) => { setCustomers(prev => [...prev, customer]); showSwal('تم إضافة العميل', 'success'); };
@@ -203,7 +236,7 @@ const App = () => {
 
   const handleAddStaff = (employee) => { setStaff(prev => [...prev, employee]); showSwal('تم إضافة الموظف', 'success'); };
   const handleUpdateStaff = (id, updatedData) => { setStaff(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s)); showSwal('تم تحديث بيانات الموظف', 'success'); };
-  const handleDeleteStaff = (id) => { setStaff(prev => prev.filter(s => s.id !== id)); showSwal('تم حذف الموظف', 'warning'); };
+  const handleDeleteStaff = (id) => { handleGenericDelete('staff', id, setStaff); };
 
   const handleDirectStockAdd = (item) => { setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]); showSwal('تم إضافة الصنف للمخزن', 'success'); };
 
