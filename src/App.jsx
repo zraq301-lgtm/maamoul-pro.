@@ -23,7 +23,7 @@ const App = () => {
 
   // --- دوال المزامنة ---
   const syncWithCloud = async (collectionName, data) => {
-    if (!data || (Array.isArray(data) && data.length === 0)) return;
+    if (!data) return;
     try {
       await CapacitorHttp.post({
         url: 'https://maamoul-pro-five.vercel.app/api/sync',
@@ -42,18 +42,19 @@ const App = () => {
       if (response.data?.success && response.data?.data) {
         const cloudData = response.data.data;
         const localData = JSON.parse(localStorage.getItem(collectionName) || '[]');
-        const mergedData = cloudData.length >= localData.length ? cloudData : localData;
-        setter(mergedData);
-        localStorage.setItem(collectionName, JSON.stringify(mergedData));
+        // ملاحظة: اعتمدنا هنا على بيانات السيرفر كمرجع أساسي لتجنب عودة البيانات المحذوفة
+        const finalData = cloudData.length > 0 ? cloudData : localData;
+        setter(finalData);
+        localStorage.setItem(collectionName, JSON.stringify(finalData));
       }
     } catch (error) { console.error("Fetch Error:", collectionName); }
   };
 
-  // دالة الحذف المفعلة باستخدام الرابط الجديد
+  // دالة الحذف العامة
   const deleteFromCloud = async (collectionName, id) => {
     try {
       await CapacitorHttp.post({
-        url: 'https://maamoul-pro-five.vercel.app/api/delete-item', // الرابط بناءً على اسم الملف المذكور
+        url: 'https://maamoul-pro-five.vercel.app/api/delete-item', 
         headers: { 'Content-Type': 'application/json' },
         data: { collectionName, id },
       });
@@ -99,7 +100,7 @@ const App = () => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const totalPurchases = inventory.filter(p => p.paymentMethod === 'كاش').reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
-    return { totalIncome, totalExpenses: totalExp, cashBalance: totalIncome - (totalExp + totalPurchases), stockValue: stock.reduce((sum, s) => sum + (s.balance * s.price), 0) };
+    return { totalIncome, totalExpenses: totalExp, cashBalance: totalIncome - (totalExp + totalPurchases), stockValue: stock.reduce((sum, s) => sum + (s.balance * (s.price || 0)), 0) };
   }, [salesData, expenses, inventory, stock]);
 
   const addCashEntry = (entry) => {
@@ -107,7 +108,12 @@ const App = () => {
     setCashBook(prev => [newEntry, ...prev]);
   };
 
-  // --- معالجات الأحداث ---
+  // --- معالجات الأحداث والحذف الموحد ---
+  const handleGenericDelete = (collectionName, id, setter) => {
+    setter(prev => prev.filter(item => (item.id !== id && item._id !== id)));
+    deleteFromCloud(collectionName, id);
+  };
+
   const handleSavePurchase = (p) => {
     setInventory(prev => [...prev, p]);
     setStock(prev => {
@@ -127,24 +133,50 @@ const App = () => {
 
   const handleDirectStockAdd = (item) => setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]);
 
-  const handleDeleteStockItem = (id) => {
-    setStock(prev => prev.filter(i => i.id !== id));
-    deleteFromCloud('stock', id);
-  };
-
-  // --- رندرة الصفحات المصلحة ---
+  // --- رندرة الصفحات مع ربط دوال الحذف لكل قسم ---
   const renderPage = () => {
     const cp = { onBack: () => setActivePage('dashboard') };
     switch (activePage) {
       case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
-      case 'inventory': return <Inventory {...cp} categories={stock} onAddItem={handleDirectStockAdd} onDeleteItem={handleDeleteStockItem} />;
-      case 'purchases': return <PurchasesManager {...cp} stock={stock} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(d) => setSupplierWaitingList(prev => [d, ...prev])} />;
-      case 'sales': return <Sales {...cp} onSaveSale={(s) => { setSalesData(prev => [...prev, s]); addCashEntry({type:'وارد', category:'مبيعات', amount:s.total, description:s.productName}); }} customers={customers} stock={stock} />;
-      case 'expenses': return <Expenses {...cp} onSaveExpense={(e) => { setExpenses(prev => [...prev, e]); addCashEntry({type:'صادر', category:e.category, amount:e.amount, description:e.description}); }} />;
-      case 'suppliers': return <Suppliers {...cp} suppliers={suppliers} waitingList={supplierWaitingList} onAddSupplier={(s) => setSuppliers(prev => [...prev, s])} onPayDebt={(name, amt) => addCashEntry({type:'صادر', category:'سداد مورد', amount:amt, description:name})} />;
-      case 'customers': return <Customers {...cp} customers={customers} onAddCustomer={(c) => setCustomers(prev => [...prev, c])} />;
-      case 'financials': return <Financials {...cp} stats={financialStats} cashBook={cashBook} />;
-      case 'staff': return <StaffManagement {...cp} staff={staff} onAddStaff={(e) => setStaff(prev => [...prev, e])} />;
+      
+      case 'inventory': 
+        return <Inventory {...cp} categories={stock} onAddItem={handleDirectStockAdd} 
+               onDeleteItem={(id) => handleGenericDelete('stock', id, setStock)} />;
+      
+      case 'purchases': 
+        return <PurchasesManager {...cp} stock={stock} onPurchaseComplete={handleSavePurchase} 
+               onOrderTrigger={(d) => setSupplierWaitingList(prev => [d, ...prev])} />;
+      
+      case 'sales': 
+        return <Sales {...cp} customers={customers} stock={stock}
+               onSaveSale={(s) => { setSalesData(prev => [...prev, s]); addCashEntry({type:'وارد', category:'مبيعات', amount:s.total, description:s.productName}); }} 
+               onDeleteSale={(id) => handleGenericDelete('salesData', id, setSalesData)} />;
+      
+      case 'expenses': 
+        return <Expenses {...cp} 
+               onSaveExpense={(e) => { setExpenses(prev => [...prev, e]); addCashEntry({type:'صادر', category:e.category, amount:e.amount, description:e.description}); }}
+               onDeleteExpense={(id) => handleGenericDelete('expenses', id, setExpenses)} />;
+      
+      case 'suppliers': 
+        return <Suppliers {...cp} suppliers={suppliers} waitingList={supplierWaitingList} 
+               onAddSupplier={(s) => setSuppliers(prev => [...prev, s])} 
+               onDeleteSupplier={(id) => handleGenericDelete('suppliers', id, setSuppliers)}
+               onPayDebt={(name, amt) => addCashEntry({type:'صادر', category:'سداد مورد', amount:amt, description:name})} />;
+      
+      case 'customers': 
+        return <Customers {...cp} customers={customers} 
+               onAddCustomer={(c) => setCustomers(prev => [...prev, c])}
+               onDeleteCustomer={(id) => handleGenericDelete('customers', id, setCustomers)} />;
+      
+      case 'financials': 
+        return <Financials {...cp} stats={financialStats} cashBook={cashBook} 
+               onDeleteEntry={(id) => handleGenericDelete('cashBook', id, setCashBook)} />;
+      
+      case 'staff': 
+        return <StaffManagement {...cp} staff={staff} 
+               onAddStaff={(e) => setStaff(prev => [...prev, e])} 
+               onDeleteStaff={(id) => handleGenericDelete('staff', id, setStaff)} />;
+      
       case 'reports': return <Reports {...cp} inventory={inventory} stock={stock} salesData={salesData} expenses={expenses} staff={staff} />;
       case 'settings': return <Settings />;
       default: return <Dashboard setActivePage={setActivePage} stats={financialStats} />;
