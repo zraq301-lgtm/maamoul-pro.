@@ -67,9 +67,11 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   };
 
   const handleFinalSave = () => {
+    // تفعيل عملية الترحيل الفعلي للمخزن
     const updatedStock = JSON.parse(JSON.stringify(safeStock));
     let totalProductionCost = 0;
 
+    // 1. خصم المواد الخام المستهلكة
     finalReport.details.forEach(item => {
       const stockItem = updatedStock.find(s => s.name.trim() === item.name.trim());
       if (stockItem) {
@@ -79,14 +81,17 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
       }
     });
 
+    // 2. نقل الإنتاج النهائي إلى المخزن
     const productName = "معمول جاهز الفاخر";
     const unitCost = totalProductionCost / finalReport.totalUnits;
     const productIdx = updatedStock.findIndex(s => s.name === productName);
 
     if (productIdx !== -1) {
+      // تحديث رصيد وتكلفة المنتج الموجود
       updatedStock[productIdx].balance = (parseFloat(updatedStock[productIdx].balance) || 0) + finalReport.totalUnits;
       updatedStock[productIdx].price = unitCost;
     } else {
+      // إضافة صنف جديد للمنتج النهائي
       updatedStock.push({
         id: Date.now(),
         name: productName,
@@ -97,7 +102,10 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
       });
     }
 
+    // حفظ التغييرات في المخزن الرئيسي
     setStock(updatedStock);
+
+    // تسجيل العملية في سجل الإنتاج
     onSaveProduction({
       ...formData,
       cartons: finalReport.cartons,
@@ -225,7 +233,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   );
 };
 
-// الستايلات المحسنة
+// الستايلات
 const headerStyle = { background: '#fff', padding: '20px', borderRadius: '15px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' };
 const selectStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' };
 const ingInputCustom = { 
