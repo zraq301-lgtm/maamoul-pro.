@@ -191,14 +191,12 @@ const App = () => {
     showSwal('تم تسجيل المصروف', 'success');
   };
 
-  // --- التعديل المطلوب: منطق الإنتاج وترحيله للمخزن كمنتج نهائي ---
   const handleSaveProduction = (production) => {
     const totalUnits = (parseFloat(production.boxes) || 0) * (parseFloat(production.unitsPerBox) || 0);
     const finalProduction = { ...production, totalUnits, id: Date.now() };
     
     setProductionData(prev => [...prev, finalProduction]);
 
-    // ترحيل البيانات فوراً للمخزن كـ "منتج نهائي"
     setStock(prev => {
       const productName = production.productName || "منتج نهائي جديد";
       const idx = prev.findIndex(s => s.name === productName);
