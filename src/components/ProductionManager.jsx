@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Factory, ArrowLeft, Calendar, Clock, ClipboardList, RefreshCw, Save, X, CheckCircle2 } from 'lucide-react';
+import { Factory, ArrowLeft, Calendar, Clock, ClipboardList, RefreshCw, Save, X, CheckCircle2, Package } from 'lucide-react';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, setStock }) => {
-  // تأمين البيانات لضمان عدم حدوث خطأ White Screen
   const safeStock = Array.isArray(stock) ? stock : [];
   const [showReport, setShowReport] = useState(false);
   const [finalReport, setFinalReport] = useState(null);
@@ -11,18 +10,23 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     date: new Date().toISOString().split('T')[0],
     shift: 'الأولى',
     ingredients: {
-      دقيق: 0, لبن: 0, عجوة: 0, سمنة: 0, سكر: 0, كارتون: 0
+      دقيق: 0, سكر: 0, عجوة: 0, سمنة: 0, زبدة: 0,
+      سولار: 0, كهرباء: 0, لبن: 0, كارتون: 0, تغليف: 0
     }
   });
 
-  // المعيار العالمي لكل وحدة (كرتونة)
+  // --- المعيار التقديري لكل كرتونة واحدة (يمكنك تعديل النسب هنا) ---
   const GOLDEN_RECIPE = {
     دقيق: 0.950,
-    لبن: 0.280,
+    سكر: 0.100,
     عجوة: 0.055,
     سمنة: 0.150,
-    سكر: 0.100,
-    كارتون: 1
+    زبدة: 0.050,
+    لبن: 0.280,
+    كارتون: 1,
+    تغليف: 0.020, // وحدة تغليف
+    سولار: 0.010,
+    كهرباء: 0.005
   };
 
   const handleChange = (e, category, field) => {
@@ -37,59 +41,62 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     }
   };
 
-  const calculateProduction = () => {
+  // دالة الحساب الذكي وفتح الشيت
+  const calculateAndOpenSheet = () => {
     const ings = formData.ingredients;
     
-    // خوارزمية البحث عن أقل مادة خام (عنق الزجاجة)
+    // حساب أقصى إنتاج ممكن بناءً على الخامات المسحوبة (Bottleneck logic)
     const limits = Object.keys(GOLDEN_RECIPE).map(key => {
-      const available = ings[key] || 0;
-      if (available === 0) return 0;
-      return Math.floor(available / GOLDEN_RECIPE[key]);
-    });
+      if (!ings[key] || ings[key] <= 0) return Infinity;
+      return Math.floor(ings[key] / GOLDEN_RECIPE[key]);
+    }).filter(val => val !== Infinity);
 
-    const actualQty = Math.min(...limits);
+    const actualQty = limits.length > 0 ? Math.min(...limits) : 0;
 
     if (actualQty <= 0) {
-      alert("⚠️ الكميات المسحوبة غير كافية لإنتاج كرتونة واحدة حسب المعيار.");
+      alert("⚠️ الكميات المسحوبة لا تكفي لإنتاج وحدة واحدة. تأكد من إدخال المكونات الأساسية.");
       return;
     }
 
-    const details = Object.keys(GOLDEN_RECIPE).map(key => ({
-      name: key,
-      withdrawn: (ings[key] || 0).toFixed(3),
-      consumed: (actualQty * GOLDEN_RECIPE[key]).toFixed(3),
-      surplus: ((ings[key] || 0) - (actualQty * GOLDEN_RECIPE[key])).toFixed(3)
-    }));
+    // تجهيز بيانات الشيت التفصيلي
+    const details = Object.keys(formData.ingredients).map(key => {
+      const withdrawn = ings[key] || 0;
+      const consumed = withdrawn > 0 ? (actualQty * (GOLDEN_RECIPE[key] || 0)) : 0;
+      const surplus = withdrawn - consumed;
+      return {
+        name: key,
+        withdrawn: withdrawn.toFixed(3),
+        consumed: consumed.toFixed(3),
+        surplus: surplus.toFixed(3)
+      };
+    });
 
     setFinalReport({ actualQty, details });
     setShowReport(true);
   };
 
   const handleFinalSave = () => {
-    // إنشاء نسخة جديدة من المخزن للتعديل
-    const updatedStock = [...safeStock];
-    let totalProductionCost = 0;
+    const updatedStock = JSON.parse(JSON.stringify(safeStock));
+    let totalCost = 0;
 
-    // 1. معالجة خصم المواد الخام
+    // 1. خصم المستهلك فقط من المخزن (الفائض يبقى في المخزن)
     finalReport.details.forEach(item => {
-      const stockIndex = updatedStock.findIndex(s => s.name?.trim() === item.name.trim());
-      if (stockIndex !== -1) {
-        const consumed = parseFloat(item.consumed);
-        // حساب التكلفة بناءً على السعر المسجل في المخزن
-        totalProductionCost += consumed * (updatedStock[stockIndex].price || 0);
-        // تحديث الرصيد (خصم المستهلك فقط وبقاء الفائض)
-        updatedStock[stockIndex].balance = (updatedStock[stockIndex].balance || 0) - consumed;
+      const stockItem = updatedStock.find(s => s.name?.trim() === item.name.trim());
+      if (stockItem) {
+        const consumedQty = parseFloat(item.consumed);
+        stockItem.balance = (stockItem.balance || 0) - consumedQty;
+        totalCost += (consumedQty * (stockItem.price || 0));
       }
     });
 
-    // 2. ترحيل المنتج النهائي
+    // 2. ترحيل المنتج النهائي لقسم "المنتج النهائي"
     const productName = "معمول جاهز الفاخر";
-    const unitCost = totalProductionCost / finalReport.actualQty;
-    const productIndex = updatedStock.findIndex(s => s.name === productName);
+    const unitCost = totalCost / finalReport.actualQty;
+    let productItem = updatedStock.find(s => s.name === productName);
 
-    if (productIndex !== -1) {
-      updatedStock[productIndex].balance += finalReport.actualQty;
-      updatedStock[productIndex].price = unitCost;
+    if (productItem) {
+      productItem.balance += finalReport.actualQty;
+      productItem.price = unitCost; // تحديث السعر بآخر تكلفة
     } else {
       updatedStock.push({
         id: Date.now(),
@@ -101,102 +108,96 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
       });
     }
 
-    // تنفيذ الحفظ الفعلي
+    // 3. الحفظ النهائي
     setStock(updatedStock);
     onSaveProduction({
       ...formData,
       productionQty: finalReport.actualQty,
-      totalCost: totalProductionCost,
+      totalCost,
       details: finalReport.details
     });
 
-    alert(`✅ تم الإنتاج بنجاح!\nالكمية: ${finalReport.actualQty} كرتونة\nتم ترحيلها لقسم المنتج النهائي.`);
-    onBack(); // العودة للوحة التحكم
+    alert("✅ تم اعتماد شيت الإنتاج، ترحيل المنتج النهائي، ورد الفائض للمخزن.");
+    onBack();
   };
 
   return (
-    <div style={{ direction: 'rtl', padding: '15px', fontFamily: "'Tajawal', sans-serif", backgroundColor: '#f1f5f9', minHeight: '100vh' }}>
+    <div style={{ direction: 'rtl', padding: '15px', fontFamily: "'Tajawal', sans-serif", backgroundColor: '#f8fafc', minHeight: '100vh' }}>
       
       {/* Header */}
-      <div style={{ background: '#fff', padding: '15px 20px', borderRadius: '20px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ background: '#1e5631', p: '8px', borderRadius: '10px', display: 'flex', padding: '8px' }}>
-            <Factory size={24} color="#fff" />
-          </div>
-          <h1 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '800', color: '#1e293b' }}>قسم الإنتاج الذكي</h1>
-        </div>
-        <button onClick={onBack} style={{ border: 'none', background: '#f8fafc', padding: '10px', borderRadius: '12px', cursor: 'pointer' }}>
-          <ArrowLeft size={24} color="#64748b" />
-        </button>
+      <div style={{ background: '#fff', padding: '15px', borderRadius: '15px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+        <h1 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: '#1e293b' }}>
+          قسم الإنتاج والمعايرة <Factory size={20} color="#1e5631" style={{ marginRight: '8px' }} />
+        </h1>
+        <button onClick={onBack} style={{ border: 'none', background: '#f1f5f9', padding: '8px', borderRadius: '10px' }}><ArrowLeft size={20} /></button>
       </div>
 
       {/* Info Bar */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-        <div style={infoCard}><Calendar size={16} color="#1e5631" /> <input type="date" value={formData.date} onChange={(e)=>handleChange(e,'info','date')} style={borderlessInput} /></div>
-        <div style={infoCard}><Clock size={16} color="#1e5631" /> <select value={formData.shift} onChange={(e)=>handleChange(e,'info','shift')} style={borderlessInput}>
+        <div style={infoCard}><Calendar size={14} /> <input type="date" value={formData.date} onChange={(e)=>handleChange(e,'info','date')} style={borderlessInput} /></div>
+        <div style={infoCard}><Clock size={14} /> <select value={formData.shift} onChange={(e)=>handleChange(e,'info','shift')} style={borderlessInput}>
           <option>الأولى</option><option>الثانية</option><option>السهرة</option></select>
         </div>
       </div>
 
-      {/* Inputs Grid */}
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '25px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-           <ClipboardList size={18} /> سجل سحب المواد الخام من العهدة
+      {/* Ingredients Grid */}
+      <div style={{ background: '#fff', padding: '15px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+        <h3 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <ClipboardList size={18} /> الخامات المسحوبة من العهدة
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           {Object.keys(formData.ingredients).map(ing => (
             <div key={ing} style={ingBox}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#475569' }}>{ing}</span>
+              <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{ing}</span>
               <input 
                 type="number" 
-                placeholder="0.00" 
+                placeholder="0" 
                 value={formData.ingredients[ing] || ''} 
                 onChange={(e) => handleChange(e, 'ingredients', ing)}
                 style={ingInput}
               />
+              <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>
+                رصيد: {safeStock.find(s => s.name?.trim() === ing.trim())?.balance || 0}
+              </span>
             </div>
           ))}
         </div>
 
         <button 
-          onClick={calculateProduction}
-          style={{ width: '100%', marginTop: '25px', padding: '20px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '18px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', fontSize: '1.1rem', cursor: 'pointer', transition: '0.3s' }}
+          onClick={calculateAndOpenSheet}
+          style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
         >
-          <RefreshCw size={22} /> معالجة الإنتاج وفتح الشيت
+          <RefreshCw size={18} /> احسب الإنتاج وافتح الشيت
         </button>
       </div>
 
-      {/* Modal: شيت تفاصيل الإنتاج */}
+      {/* Modal: شيت التفاصيل */}
       {showReport && (
         <div style={modalOverlay}>
           <div style={modalContent}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b' }}>📊 تقرير معيار الإنتاج الفعلي</h2>
-              <X onClick={() => setShowReport(false)} style={{ cursor: 'pointer', color: '#ef4444' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem' }}>📊 شيت مطابقة المعيار</h2>
+              <X onClick={() => setShowReport(false)} style={{ cursor: 'pointer' }} />
             </div>
 
-            <div style={{ background: '#f0fdf4', padding: '20px', borderRadius: '20px', textAlign: 'center', marginBottom: '20px', border: '1px solid #bcf0da' }}>
-              <span style={{ fontSize: '0.9rem', color: '#166534', fontWeight: 'bold' }}>صافي الإنتاج التام:</span>
-              <div style={{ fontSize: '2.8rem', fontWeight: '900', color: '#1e5631' }}>
-                {finalReport?.actualQty} <span style={{fontSize: '1.2rem'}}>كرتونة</span>
-              </div>
+            <div style={{ background: '#f0fdf4', padding: '15px', borderRadius: '15px', textAlign: 'center', marginBottom: '15px' }}>
+              <span style={{ fontSize: '0.85rem', color: '#166534' }}>إجمالي كراتين الإنتاج المستخرجة:</span>
+              <div style={{ fontSize: '2.2rem', fontWeight: '900', color: '#1e5631' }}>{finalReport?.actualQty}</div>
             </div>
 
-            <div style={{ maxHeight: '300px', overflowY: 'auto', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-                <thead style={{ position: 'sticky', top: 0, background: '#f8fafc' }}>
+            <div style={{ overflowX: 'auto', maxHeight: '300px' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                <thead style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
                   <tr style={{ textAlign: 'right' }}>
-                    <th style={thStyle}>المادة</th>
-                    <th style={thStyle}>المسحوب</th>
-                    <th style={thStyle}>المستهلك</th>
-                    <th style={thStyle}>الفائض</th>
+                    <th style={tdStyle}>الصنف</th>
+                    <th style={tdStyle}>المستهلك</th>
+                    <th style={tdStyle}>الفائض (يرد)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {finalReport?.details.map(item => (
+                  {finalReport?.details.filter(d => d.withdrawn > 0).map(item => (
                     <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={tdStyle}>{item.name}</td>
-                      <td style={tdStyle}>{item.withdrawn}</td>
                       <td style={{ ...tdStyle, color: '#ef4444', fontWeight: 'bold' }}>{item.consumed}</td>
                       <td style={{ ...tdStyle, color: '#10b981', fontWeight: 'bold' }}>{item.surplus}</td>
                     </tr>
@@ -207,9 +208,9 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
 
             <button 
               onClick={handleFinalSave}
-              style={{ width: '100%', marginTop: '20px', padding: '16px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' }}
+              style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}
             >
-              <Save size={20} /> اعتماد الترحيل النهائي للمخزن
+              <Save size={18} /> اعتماد وحفظ في قسم المنتج النهائي
             </button>
           </div>
         </div>
@@ -218,14 +219,13 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
   );
 };
 
-// CSS-in-JS Styles
-const infoCard = { background: '#fff', padding: '10px 15px', borderRadius: '15px', display: 'flex', alignItems: 'center', gap: '10px', flex: 1, boxShadow: '0 2px 5px rgba(0,0,0,0.05)' };
-const borderlessInput = { border: 'none', outline: 'none', fontSize: '0.9rem', width: '100%', fontWeight: 'bold', color: '#1e293b' };
-const ingBox = { background: '#f8fafc', padding: '12px', borderRadius: '18px', border: '1px solid #e2e8f0', textAlign: 'center' };
-const ingInput = { width: '100%', border: 'none', background: 'transparent', borderBottom: '2px solid #cbd5e1', textAlign: 'center', fontSize: '1.2rem', fontWeight: '900', marginTop: '8px', outline: 'none', color: '#1e5631' };
-const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '15px', backdropFilter: 'blur(4px)' };
-const modalContent = { background: '#fff', width: '100%', maxWidth: '450px', borderRadius: '30px', padding: '25px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' };
-const thStyle = { padding: '12px', color: '#64748b', borderBottom: '1px solid #e2e8f0' };
-const tdStyle = { padding: '12px' };
+// الستايلات المساعدة
+const infoCard = { background: '#fff', padding: '8px 10px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '5px', flex: 1, boxShadow: '0 2px 5px rgba(0,0,0,0.05)' };
+const borderlessInput = { border: 'none', outline: 'none', fontSize: '0.75rem', width: '100%', background: 'transparent' };
+const ingBox = { background: '#f8fafc', padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', display: 'flex', flexDirection: 'column' };
+const ingInput = { width: '100%', border: 'none', background: 'transparent', borderBottom: '2px solid #1e5631', textAlign: 'center', fontSize: '1rem', fontWeight: 'bold', outline: 'none', margin: '5px 0' };
+const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '15px' };
+const modalContent = { background: '#fff', width: '100%', maxWidth: '450px', borderRadius: '20px', padding: '20px', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' };
+const tdStyle = { padding: '10px 5px' };
 
 export default ProductionManager;
