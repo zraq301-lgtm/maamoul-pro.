@@ -19,42 +19,45 @@ jobs:
       - name: 2. Setup Node & Java
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - uses: actions/setup-java@v4
+          # تم التحديث إلى 22 لحل خطأ [fatal]
+          node-version: '22'
+          
+      - name: 3. Setup Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Fix Package JSON & Install Dependencies
+      - name: 4. Fix Package JSON & Install Dependencies
         run: |
-          # إضافة المكتبات الناقصة يدوياً لضمان توفر أوامر Capacitor
+          # تثبيت الأدوات بنسخ متوافقة
           npm install @capacitor/cli@latest @capacitor/core@latest @capacitor/android@latest --save-exact
-          # تثبيت بقية المكتبات الموجودة في ملفك
+          # تثبيت بقية المكتبات مع تجاوز تحذيرات التوافق
           npm install --legacy-peer-deps
 
-      - name: 4. Build Web (Vite)
+      - name: 5. Build Web (Vite)
         run: |
-          # تشغيل بناء Vite (سيخرج الملفات في dist حسب ملفك)
+          # بناء المشروع - المخرجات ستكون في مجلد dist حسب ملف package.json الخاص بك
           npm run build
-          # التأكد من وجود مجلد التحميل لـ Capacitor
+          # كاباسيتور يحتاج مجلد www بشكل افتراضي، سنقوم بنسخ dist إليه
           mkdir -p www
           cp -r dist/* www/
 
-      - name: 5. Construct Android Project
+      - name: 6. Construct Android Project from Scratch
         run: |
-          # تنظيف أي محاولات فاشلة سابقة
+          # تنظيف أي بقايا
           rm -rf android
           
-          # إنشاء إعدادات Capacitor أولية إذا لم تكن موجودة
+          # إنشاء إعدادات كاباسيتور إذا لم تكن موجودة
           if [ ! -f "capacitor.config.json" ]; then
-            echo '{"appId": "com.mamoul.app", "appName": "معمول", "webDir": "www", "bundledWebRuntime": false}' > capacitor.config.json
+            echo '{"appId": "com.mamoul.app", "appName": "معمول", "webDir": "www"}' > capacitor.config.json
           fi
 
-          # إضافة أندرويد وتشغيل المزامنة
+          # إضافة منصة أندرويد
           npx cap add android
           npx cap sync android
 
-      - name: 6. Android Configuration (Identity & Firebase)
+      - name: 7. Android Configuration (Firebase & Identity)
         run: |
           # حقن ملف Firebase
           mkdir -p android/app/
@@ -66,35 +69,41 @@ jobs:
           }
           EOF
 
-          # تعديل الـ Package Name واسم التطبيق
+          # تعديل الـ Package Name في ملفات Gradle لضمان مطابقة Firebase
           sed -i 's/com.capacitorjs.app/com.mamoul.app/g' android/app/build.gradle
           sed -i 's/applicationId ".*"/applicationId "com.mamoul.app"/' android/app/build.gradle
           
+          # تعديل اسم التطبيق ليظهر بالعربية "معمول"
           STRINGS="android/app/src/main/res/values/strings.xml"
           if [ -f "$STRINGS" ]; then
             sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">معمول<\/string>/' $STRINGS
           fi
 
-      - name: 7. Gradle Build (Native APK)
+      - name: 8. Native Android Compilation
         working-directory: ./android
         run: |
           chmod +x gradlew
-          # حل مشكلة تضارب المكتبات الشهيرة
+          # حل مشكلة تضارب مكتبات التشفير
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
           ./gradlew assembleRelease --no-daemon
 
-      - name: 8. Sign & Finalize
+      - name: 9. Sign APK
         run: |
+          # إنشاء مفتاح توقيع مؤقت
           keytool -genkey -v -keystore mamoul.jks -alias mamoul_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" -dname "CN=MamoulApp, O=Mamoul, C=EG" -noprompt
+          
+          # البحث عن ملف الـ APK الناتج
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          
+          # توقيع الملف النهائي
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
           $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks mamoul.jks --ks-pass pass:"mamoul_pass_2026" --out Mamoul-Final.apk "$APK_PATH"
 
-      - name: 9. GitHub Release
+      - name: 10. Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.3.${{ github.run_number }}
-          name: "Mamoul Release v1.3.${{ github.run_number }}"
+          tag_name: v1.4.${{ github.run_number }}
+          name: "Mamoul Build v1.4.${{ github.run_number }}"
           files: Mamoul-Final.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
