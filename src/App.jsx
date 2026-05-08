@@ -21,7 +21,7 @@ import './App.css';
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
 
-  // --- دوال المزامنة ---
+  // --- دوال المزامنة (بدون تغيير) ---
   const syncWithCloud = async (collectionName, data) => {
     if (!data) return;
     try {
@@ -42,7 +42,6 @@ const App = () => {
       if (response.data?.success && response.data?.data) {
         const cloudData = response.data.data;
         const localData = JSON.parse(localStorage.getItem(collectionName) || '[]');
-        // ملاحظة: اعتمدنا هنا على بيانات السيرفر كمرجع أساسي لتجنب عودة البيانات المحذوفة
         const finalData = cloudData.length > 0 ? cloudData : localData;
         setter(finalData);
         localStorage.setItem(collectionName, JSON.stringify(finalData));
@@ -50,7 +49,6 @@ const App = () => {
     } catch (error) { console.error("Fetch Error:", collectionName); }
   };
 
-  // دالة الحذف العامة
   const deleteFromCloud = async (collectionName, id) => {
     try {
       await CapacitorHttp.post({
@@ -108,7 +106,6 @@ const App = () => {
     setCashBook(prev => [newEntry, ...prev]);
   };
 
-  // --- معالجات الأحداث والحذف الموحد ---
   const handleGenericDelete = (collectionName, id, setter) => {
     setter(prev => prev.filter(item => (item.id !== id && item._id !== id)));
     deleteFromCloud(collectionName, id);
@@ -133,7 +130,7 @@ const App = () => {
 
   const handleDirectStockAdd = (item) => setStock(prev => [...prev, { ...item, id: Date.now(), batches: [{ date: new Date().toLocaleDateString(), qty: item.balance, cost: item.price }] }]);
 
-  // --- رندرة الصفحات مع ربط دوال الحذف لكل قسم ---
+  // --- رندرة الصفحات (هنا تم إضافة الحالات المفقودة للإنتاج والهالك) ---
   const renderPage = () => {
     const cp = { onBack: () => setActivePage('dashboard') };
     switch (activePage) {
@@ -147,6 +144,17 @@ const App = () => {
         return <PurchasesManager {...cp} stock={stock} onPurchaseComplete={handleSavePurchase} 
                onOrderTrigger={(d) => setSupplierWaitingList(prev => [d, ...prev])} />;
       
+      // إضافة قسم الإنتاج هنا ليعمل الربط
+      case 'production':
+        return <ProductionManager {...cp} stock={stock} setStock={setStock} 
+               onSaveProduction={(data) => setProductionData(prev => [data, ...prev])} />;
+
+      // إضافة قسم الهالك هنا ليعمل الربط
+      case 'waste':
+        return <Waste {...cp} stock={stock} setStock={setStock}
+               onSaveWaste={(w) => setWaste(prev => [w, ...prev])}
+               onDeleteWaste={(id) => handleGenericDelete('waste', id, setWaste)} />;
+
       case 'sales': 
         return <Sales {...cp} customers={customers} stock={stock}
                onSaveSale={(s) => { setSalesData(prev => [...prev, s]); addCashEntry({type:'وارد', category:'مبيعات', amount:s.total, description:s.productName}); }} 
