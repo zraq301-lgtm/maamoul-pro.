@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { FileSpreadsheet, ArrowRight, Plus, Table as TableIcon, LayoutGrid, Trash2, Package, Archive, Layers, Activity, AlertTriangle, Bell } from 'lucide-react';
 
-const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
+const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, setStock }) => {
   const [activeTab, setActiveTab] = useState('raw');
   const [viewMode, setViewMode] = useState('table');
   const [gridData, setGridData] = useState([]);
@@ -35,7 +35,6 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
     
     setAlerts(lowStockItems);
 
-    // إذا وجد نقص جديد، أرسل إشعار للنظام (الأندرويد)
     if (lowStockItems.length > 0) {
       const lastItem = lowStockItems[lowStockItems.length - 1];
       sendSystemNotification("⚠️ تنبيه مخزن", `الصنف "${lastItem.name}" أوشك على النفاد!`);
@@ -50,6 +49,40 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
     price: '',
     isNew: true
   });
+
+  // دالة الحذف النهائية (قاعدة البيانات + الواجهة)
+  const handleDeleteProcess = async (id, isNew) => {
+    if (window.confirm("هل أنت متأكد من حذف هذا الصنف نهائياً؟")) {
+      try {
+        // 1. إذا لم يكن صفاً جديداً فارغاً، احذفه من قاعدة البيانات
+        if (!isNew) {
+          const response = await fetch('https://maamoul-pro-five.vercel.app/api/delete-item', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+          });
+
+          if (!response.ok) throw new Error("فشل الحذف من الخادم");
+        }
+
+        // 2. تحديث الواجهة فوراً (React State)
+        const updatedData = gridData.filter(item => item.id !== id);
+        setGridData(updatedData);
+
+        // 3. تحديث مصفوفة المخزن الأب (لضمان المزامنة مع App.js)
+        if (onDeleteItem) {
+          onDeleteItem(id);
+        }
+
+        console.log("تم الحذف بنجاح من قاعدة البيانات والمكتبة المحلية");
+      } catch (error) {
+        console.error("خطأ في الحذف:", error);
+        alert("حدث خطأ أثناء الاتصال بقاعدة البيانات، تم الحذف من الشاشة فقط.");
+        // حذف من الواجهة حتى لو فشل السيرفر لراحة المستخدم
+        setGridData(prev => prev.filter(item => item.id !== id));
+      }
+    }
+  };
 
   useEffect(() => {
     const safeCategories = Array.isArray(categories) ? categories : [];
@@ -84,7 +117,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', backgroundColor: '#f1f5f9', paddingBottom: '120px' }}>
       
-      {/* التنبيهات الداخلية في الصفحة */}
+      {/* التنبيهات الداخلية */}
       {alerts.length > 0 && (
         <div style={{ background: '#fff1f2', borderRight: '5px solid #ef4444', padding: '12px', borderRadius: '12px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)' }}>
           <AlertTriangle color="#ef4444" size={20} />
@@ -142,19 +175,19 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
         </div>
       </div>
 
-      {/* محتوى العرض */}
+      {/* محتوى العرض - الجدول */}
       {viewMode === 'table' && activeTab === 'raw' ? (
         <div style={{ background: '#fff', borderRadius: '20px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '500px' }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                  <th style={{ padding: '15px', width: '50px', color: '#64748b', fontSize: '0.85rem' }}>#</th>
-                  <th style={{ padding: '15px', textAlign: 'right', color: '#1e293b', fontSize: '0.9rem' }}>الصنف</th>
-                  <th style={{ padding: '15px', color: '#1e293b', fontSize: '0.9rem' }}>التاريخ</th>
-                  <th style={{ padding: '15px', color: '#1e293b', fontSize: '0.9rem' }}>الكمية</th>
-                  <th style={{ padding: '15px', color: '#1e293b', fontSize: '0.9rem' }}>التكلفة</th>
-                  <th style={{ padding: '15px', width: '60px' }}>إجراء</th>
+                  <th style={{ padding: '15px', width: '50px', color: '#64748b' }}>#</th>
+                  <th style={{ padding: '15px', textAlign: 'right', color: '#1e293b' }}>الصنف</th>
+                  <th style={{ padding: '15px', textAlign: 'center' }}>التاريخ</th>
+                  <th style={{ padding: '15px', textAlign: 'center' }}>الكمية</th>
+                  <th style={{ padding: '15px', textAlign: 'center' }}>التكلفة</th>
+                  <th style={{ padding: '15px', width: '60px' }}>حذف</th>
                 </tr>
               </thead>
               <tbody>
@@ -162,7 +195,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
                   const isLow = item.name && item.balance !== '' && parseFloat(item.balance) < 5;
                   return (
                     <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', backgroundColor: isLow ? '#fff5f5' : 'transparent' }}>
-                      <td style={{ textAlign: 'center', color: '#cbd5e1', fontSize: '0.75rem', fontWeight: 'bold' }}>{index + 1}</td>
+                      <td style={{ textAlign: 'center', color: '#cbd5e1', fontSize: '0.75rem' }}>{index + 1}</td>
                       <td>
                         <input value={item.name} onChange={(e) => handleCellChange(item.id, 'name', e.target.value)} style={{ width: '100%', border: 'none', padding: '12px 15px', outline: 'none', background: 'transparent' }} placeholder="..." />
                       </td>
@@ -176,7 +209,12 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
                         <input type="number" value={item.price} onChange={(e) => handleCellChange(item.id, 'price', e.target.value)} style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', textAlign: 'center' }} placeholder="0" />
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        <button onClick={() => onDeleteItem(item.id)} style={{ color: '#ef4444', border: 'none', background: 'none' }}><Trash2 size={16} /></button>
+                        <button 
+                          onClick={() => handleDeleteProcess(item.id, item.isNew)} 
+                          style={{ color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer', padding: '8px' }}
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -184,16 +222,23 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
               </tbody>
             </table>
           </div>
-          <button onClick={extendSheet} style={{ width: '100%', padding: '15px', background: '#fff', border: 'none', color: '#1e5631', fontWeight: 'bold', borderTop: '2px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <button onClick={extendSheet} style={{ width: '100%', padding: '15px', background: '#fff', border: 'none', color: '#1e5631', fontWeight: 'bold', borderTop: '2px dashed #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
             <Plus size={18} /> تمديد شيت الإكسل
           </button>
         </div>
       ) : (
+        /* وضع الرفوف */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
           {gridData.filter(i => i.name).map(item => {
              const isLow = parseFloat(item.balance) < 5;
              return (
                 <div key={item.id} style={{ background: '#fff', borderRadius: '22px', padding: '20px', borderBottom: `5px solid ${isLow ? '#ef4444' : '#1e5631'}`, boxShadow: '0 4px 15px rgba(0,0,0,0.05)', textAlign: 'center', position: 'relative' }}>
+                  <button 
+                    onClick={() => handleDeleteProcess(item.id, item.isNew)}
+                    style={{ position: 'absolute', top: '10px', right: '10px', border: 'none', background: '#fff0f0', color: '#ef4444', padding: '5px', borderRadius: '8px', cursor: 'pointer' }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                   {isLow && <div style={{ position: 'absolute', top: '10px', left: '10px' }}><AlertTriangle size={16} color="#ef4444" /></div>}
                   <div style={{ background: isLow ? '#fee2e2' : '#f0fdf4', width: '55px', height: '55px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                     <Package size={26} color={isLow ? '#ef4444' : '#1e5631'} />
@@ -208,9 +253,9 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem }) => {
         </div>
       )}
 
-      {/* زر الحفظ */}
+      {/* زر الحفظ السفلي */}
       <div style={{ position: 'fixed', bottom: '0', left: '0', right: '0', padding: '20px', background: 'linear-gradient(to top, #f1f5f9 80%, transparent)', zIndex: 100 }}>
-        <button style={{ width: '100%', background: '#1e5631', color: '#fff', border: 'none', padding: '18px', borderRadius: '20px', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+        <button style={{ width: '100%', background: '#1e5631', color: '#fff', border: 'none', padding: '18px', borderRadius: '20px', fontWeight: 'bold', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', cursor: 'pointer', boxShadow: '0 10px 20px rgba(30,86,49,0.3)' }}>
           <Archive size={20} /> حفظ البيانات ومزامنة الإشعارات ✅
         </button>
       </div>
