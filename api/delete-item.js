@@ -1,53 +1,60 @@
 import clientPromise from "../lib/mongodb.js";
 
 export default async function handler(request, response) {
-    // إعدادات CORS للسماح بالاتصال من تطبيق الأندرويد
-    response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader('Access-Control-Allow-Methods', 'DELETE, OPTIONS');
-    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  // 1. إعدادات CORS الشاملة
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); // السماح بـ POST للحذف لضمان التوافق
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (request.method === 'OPTIONS') {
-        return response.status(200).end();
+  // معالجة طلب OPTIONS (Preflight request)
+  if (request.method === 'OPTIONS') {
+    return response.status(200).end();
+  }
+
+  // 2. السماح بـ POST لأن CapacitorHttp يرسل البيانات في الـ Body بشكل أفضل عبر POST
+  if (request.method !== 'POST') {
+    return response.status(405).json({ error: 'الرجاء استخدام POST لإتمام عملية الحذف' });
+  }
+
+  try {
+    // 3. استلام البيانات من Body (أكثر أماناً واحترافية)
+    const { collectionName, id } = request.body;
+
+    if (!collectionName || !id) {
+      return response.status(400).json({ error: 'Missing collectionName or id' });
     }
 
-    // السماح فقط بطريقة DELETE
-    if (request.method !== 'DELETE') {
-        return response.status(405).json({ error: 'Method Not Allowed. Use DELETE.' });
+    const client = await clientPromise;
+    const db = client.db("maamoul_db");
+
+    // 4. محاولة الحذف الذكي (نصوص أو أرقام)
+    const query = {
+      $or: [
+        { id: id },
+        { id: isNaN(id) ? id : parseInt(id) },
+        { _id: id } // دعم إضافي في حال كان الحذف عبر الـ _id الخاص بمونجو
+      ]
+    };
+
+    const result = await db.collection(collectionName).deleteOne(query);
+
+    if (result.deletedCount === 1) {
+      return response.status(200).json({
+        success: true,
+        message: `تم الحذف بنجاح من ${collectionName}`
+      });
+    } else {
+      return response.status(404).json({
+        success: false,
+        message: "العنصر غير موجود أو تم حذفه مسبقاً"
+      });
     }
 
-    try {
-        const { collectionName, id } = request.query;
-
-        if (!collectionName || !id) {
-            return response.status(400).json({ error: 'Missing collectionName or id' });
-        }
-
-        const client = await clientPromise;
-        const db = client.db("maamoul_db");
-
-        // محاولة الحذف
-        // ملاحظة: نحول الـ id لرقم إذا كان مخزناً كرقم، أو نتركه نصاً إذا كان نصاً
-        const result = await db.collection(collectionName).deleteOne({ 
-            id: isNaN(id) ? id : parseInt(id) 
-        });
-
-        if (result.deletedCount === 1) {
-            return response.status(200).json({ 
-                success: true, 
-                message: `تم الحذف بنجاح من ${collectionName}` 
-            });
-        } else {
-            return response.status(404).json({ 
-                success: false, 
-                message: "العنصر غير موجود في قاعدة البيانات" 
-            });
-        }
-
-    } catch (error) {
-        console.error('Delete Error:', error);
-        return response.status(500).json({ 
-            error: 'Internal Server Error', 
-            details: error.message 
-        });
-    }
+  } catch (error) {
+    console.error('Delete Error:', error);
+    return response.status(500).json({
+      error: 'Internal Server Error',
+      details: error.message
+    });
+  }
 }
