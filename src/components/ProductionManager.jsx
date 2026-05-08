@@ -1,70 +1,91 @@
 import React, { useState, useMemo } from 'react';
-import { Factory, ArrowLeft, Calendar, Clock, ClipboardList, RefreshCw, Save, X, CheckCircle2, Package } from 'lucide-react';
+import { Factory, ArrowLeft, Calendar, Clock, ClipboardList, RefreshCw, Save, X, Plus, Trash2 } from 'lucide-react';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) => {
-  // تأمين البيانات القادمة من الخارج
   const safeStock = useMemo(() => Array.isArray(stock) ? stock : [], [stock]);
   
+  // تصفية المخزن لعرض الخامات فقط في قائمة الاختيار
+  const availableRawMaterials = useMemo(() => 
+    safeStock.filter(item => item.category === 'raw' || item.category === 'ingredients'), 
+    [safeStock]
+  );
+
   const [showReport, setShowReport] = useState(false);
   const [finalReport, setFinalReport] = useState(null);
 
-  // الحالة الابتدائية للمدخلات
+  // الحالة الابتدائية
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     shift: 'الأولى',
-    ingredients: {
-      دقيق: 0, سكر: 0, عجوة: 0, سمنة: 0, زبدة: 0,
-      سولار: 0, كهرباء: 0, لبن: 0, كارتون: 0, تغليف: 0
-    }
+    // بدلاً من الأجسام الثابتة، نبدأ بمصفوفة فارغة للمواد المختارة
+    selectedIngredients: [] 
   });
 
-  // المعيار التقديري
+  // المعايير (يمكنك نقلها لقاعدة بيانات لاحقاً)
   const GOLDEN_RECIPE = {
-    دقيق: 0.950, سكر: 0.100, عجوة: 0.055, سمنة: 0.150,
-    زبدة: 0.050, لبن: 0.280, كارتون: 1, تغليف: 0.020,
-    سولار: 0.010, كهرباء: 0.005
+    "دقيق": 0.950, "سكر": 0.100, "عجوة": 0.055, "سمنة": 0.150,
+    "زبدة": 0.050, "لبن": 0.280, "كارتون": 1, "تغليف": 0.020,
+    "سولار": 0.010, "كهرباء": 0.005
   };
 
-  // دالة تغيير المدخلات (تم إصلاحها لتعمل مع الـ Inputs بشكل صحيح)
-  const handleInputChange = (e, category, field) => {
-    const val = e.target.value;
-    // تحويل القيمة لرقم فقط إذا كان الحقل يخص المكونات
-    const finalValue = category === 'ingredients' ? (parseFloat(val) || 0) : val;
-
-    if (category === 'ingredients') {
-      setFormData(prev => ({
-        ...prev,
-        ingredients: { ...prev.ingredients, [field]: finalValue }
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [field]: finalValue }));
+  // دالة لإضافة مادة من المخزن إلى قائمة السحب
+  const addIngredient = (ingredientName) => {
+    if (!ingredientName) return;
+    if (formData.selectedIngredients.find(i => i.name === ingredientName)) {
+      alert("المادة مضافة بالفعل");
+      return;
     }
+    setFormData(prev => ({
+      ...prev,
+      selectedIngredients: [...prev.selectedIngredients, { name: ingredientName, amount: 0 }]
+    }));
+  };
+
+  // دالة حذف مادة من القائمة الحالية
+  const removeIngredient = (name) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedIngredients: prev.selectedIngredients.filter(i => i.name !== name)
+    }));
+  };
+
+  const handleAmountChange = (name, value) => {
+    setFormData(prev => ({
+      ...prev,
+      selectedIngredients: prev.selectedIngredients.map(i => 
+        i.name === name ? { ...i, amount: parseFloat(value) || 0 } : i
+      )
+    }));
   };
 
   const calculateAndOpenSheet = () => {
-    const ings = formData.ingredients;
-    
-    // حساب عنق الزجاجة (أقل كمية تسمح بها الخامات)
-    const limits = Object.keys(GOLDEN_RECIPE).map(key => {
-      const available = ings[key] || 0;
-      if (available <= 0) return Infinity;
-      return Math.floor(available / GOLDEN_RECIPE[key]);
+    const ings = formData.selectedIngredients;
+    if (ings.length === 0) {
+      alert("الرجاء إضافة مواد من المخزن أولاً");
+      return;
+    }
+
+    // حساب الإنتاج بناءً على المواد التي لها "معيار" فقط
+    const limits = ings.map(ing => {
+      const recipeRatio = GOLDEN_RECIPE[ing.name];
+      if (!recipeRatio || ing.amount <= 0) return Infinity;
+      return Math.floor(ing.amount / recipeRatio);
     }).filter(val => val !== Infinity);
 
     const actualQty = limits.length > 0 ? Math.min(...limits) : 0;
 
     if (actualQty <= 0) {
-      alert("⚠️ الكميات المسحوبة لا تكفي لإنتاج كرتونة واحدة على الأقل.");
+      alert("⚠️ الكميات لا تكفي لإنتاج كرتونة واحدة (تأكد من مطابقة المعيار)");
       return;
     }
 
-    const details = Object.keys(ings).map(key => {
-      const withdrawn = ings[key] || 0;
-      const consumed = actualQty * (GOLDEN_RECIPE[key] || 0);
-      const surplus = withdrawn - consumed;
+    const details = ings.map(ing => {
+      const recipeRatio = GOLDEN_RECIPE[ing.name] || 0;
+      const consumed = actualQty * recipeRatio;
+      const surplus = ing.amount - consumed;
       return {
-        name: key,
-        withdrawn: withdrawn.toFixed(3),
+        name: ing.name,
+        withdrawn: ing.amount.toFixed(3),
         consumed: consumed.toFixed(3),
         surplus: surplus.toFixed(3)
       };
@@ -76,21 +97,18 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
 
   const handleFinalSave = () => {
     if (!finalReport) return;
-
     const updatedStock = [...safeStock];
     let totalProductionCost = 0;
 
-    // 1. الخصم من المخزن
     finalReport.details.forEach(item => {
-      const stockIdx = updatedStock.findIndex(s => s.name?.trim() === item.name.trim());
+      const stockIdx = updatedStock.findIndex(s => s.name === item.name);
       if (stockIdx !== -1) {
         const consumedQty = parseFloat(item.consumed);
-        updatedStock[stockIdx].balance = (updatedStock[stockIdx].balance || 0) - consumedQty;
+        updatedStock[stockIdx].balance -= consumedQty;
         totalProductionCost += (consumedQty * (updatedStock[stockIdx].price || 0));
       }
     });
 
-    // 2. إضافة المنتج النهائي
     const productName = "معمول جاهز الفاخر";
     const unitCost = totalProductionCost / finalReport.actualQty;
     const productIdx = updatedStock.findIndex(s => s.name === productName);
@@ -109,120 +127,93 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
       });
     }
 
-    // 3. التنفيذ
     setStock(updatedStock);
-    onSaveProduction({
-      ...formData,
-      productionQty: finalReport.actualQty,
-      totalCost: totalProductionCost,
-      details: finalReport.details
-    });
-
-    alert("✅ تم الحفظ بنجاح وترحيل البيانات للمخزن.");
+    onSaveProduction({ ...formData, productionQty: finalReport.actualQty, totalCost: totalProductionCost });
+    alert("✅ تم ترحيل البيانات للمخزن بنجاح");
     onBack();
   };
 
   return (
-    <div style={{ direction: 'rtl', padding: '15px', fontFamily: "'Tajawal', sans-serif", backgroundColor: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ direction: 'rtl', padding: '15px', fontFamily: 'Arial', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
       
       {/* Header */}
-      <div style={{ background: '#fff', padding: '15px', borderRadius: '15px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
-        <h1 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: '#1e293b' }}>
-          قسم الإنتاج والمعايرة <Factory size={20} color="#1e5631" style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+      <div style={headerStyle}>
+        <h1 style={{ fontSize: '1.1rem', margin: 0 }}>
+          الإنتاج المفتوح <Factory size={20} style={{ verticalAlign: 'middle' }} />
         </h1>
-        <button onClick={onBack} style={{ border: 'none', background: '#f1f5f9', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}>
-          <ArrowLeft size={20} />
-        </button>
+        <button onClick={onBack} style={iconBtnStyle}><ArrowLeft /></button>
       </div>
 
-      {/* Info Bar */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-        <div style={infoCard}>
-          <Calendar size={14} /> 
-          <input type="date" value={formData.date} onChange={(e) => handleInputChange(e, 'info', 'date')} style={borderlessInput} />
-        </div>
-        <div style={infoCard}>
-          <Clock size={14} /> 
-          <select value={formData.shift} onChange={(e) => handleInputChange(e, 'info', 'shift')} style={borderlessInput}>
-            <option value="الأولى">الأولى</option>
-            <option value="الثانية">الثانية</option>
-            <option value="السهرة">السهرة</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Ingredients Grid */}
-      <div style={{ background: '#fff', padding: '15px', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <ClipboardList size={18} /> الخامات المسحوبة من العهدة
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          {Object.keys(formData.ingredients).map(ing => (
-            <div key={ing} style={ingBox}>
-              <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>{ing}</span>
-              <input 
-                type="number" 
-                placeholder="0" 
-                value={formData.ingredients[ing] || ''} 
-                onChange={(e) => handleInputChange(e, 'ingredients', ing)}
-                style={ingInput}
-              />
-              <span style={{ fontSize: '0.6rem', color: '#94a3b8' }}>
-                رصيد: {safeStock.find(s => s.name?.trim() === ing.trim())?.balance || 0}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <button 
-          onClick={calculateAndOpenSheet}
-          style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' }}
+      {/* اختيار المادة من المخزن */}
+      <div style={addSectionStyle}>
+        <select 
+          onChange={(e) => { addIngredient(e.target.value); e.target.value = ""; }}
+          style={selectStyle}
         >
-          <RefreshCw size={18} /> احسب الإنتاج وافتح الشيت
-        </button>
+          <option value="">➕ إضافة مادة من المخزن...</option>
+          {availableRawMaterials.map(m => (
+            <option key={m.id} value={m.name}>{m.name} (متوفر: {m.balance})</option>
+          ))}
+        </select>
       </div>
 
-      {/* Modal: شيت التفاصيل */}
+      {/* قائمة المواد المسحوبة */}
+      <div style={gridStyle}>
+        {formData.selectedIngredients.map((ing) => (
+          <div key={ing.name} style={ingBox}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 'bold' }}>{ing.name}</span>
+              <Trash2 size={16} color="red" onClick={() => removeIngredient(ing.name)} />
+            </div>
+            <input 
+              type="number" 
+              value={ing.amount || ''} 
+              onChange={(e) => handleAmountChange(ing.name, e.target.value)}
+              style={ingInput}
+              placeholder="الكمية"
+            />
+            <span style={{ fontSize: '0.7rem', color: '#666' }}>
+               رصيد المخزن: {safeStock.find(s => s.name === ing.name)?.balance || 0}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <button onClick={calculateAndOpenSheet} style={mainBtnStyle}>
+        <RefreshCw size={18} /> احسب الإنتاج الفعلي
+      </button>
+
+      {/* مودال التقرير (نفس كودك السابق مع تعديلات بسيطة) */}
       {showReport && (
         <div style={modalOverlay}>
           <div style={modalContent}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-              <h2 style={{ margin: 0, fontSize: '1.1rem' }}>📊 شيت مطابقة المعيار</h2>
-              <X onClick={() => setShowReport(false)} style={{ cursor: 'pointer' }} />
-            </div>
-
-            <div style={{ background: '#f0fdf4', padding: '15px', borderRadius: '15px', textAlign: 'center', marginBottom: '15px' }}>
-              <span style={{ fontSize: '0.85rem', color: '#166534' }}>إجمالي كراتين الإنتاج:</span>
-              <div style={{ fontSize: '2.2rem', fontWeight: '900', color: '#1e5631' }}>{finalReport?.actualQty}</div>
-            </div>
-
-            <div style={{ overflowY: 'auto', maxHeight: '250px', border: '1px solid #eee', borderRadius: '10px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                <thead style={{ background: '#f8fafc', position: 'sticky', top: 0 }}>
-                  <tr>
-                    <th style={tdStyle}>الصنف</th>
-                    <th style={tdStyle}>المستهلك</th>
-                    <th style={tdStyle}>الفائض</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {finalReport?.details.map(item => (
-                    <tr key={item.name} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={tdStyle}>{item.name}</td>
-                      <td style={{ ...tdStyle, color: '#ef4444' }}>{item.consumed}</td>
-                      <td style={{ ...tdStyle, color: '#10b981' }}>{item.surplus}</td>
+             <h2 style={{ textAlign: 'center' }}>نتائج المعايرة</h2>
+             <div style={resultBadge}>
+                <small>الإنتاج المتوقع:</small>
+                <div>{finalReport.actualQty} كرتونة</div>
+             </div>
+             <div style={{ maxHeight: '200px', overflow: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '0.8rem' }}>
+                  <thead>
+                    <tr style={{ background: '#eee' }}>
+                      <th>المادة</th>
+                      <th>مستهلك</th>
+                      <th>فائض</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <button 
-              onClick={handleFinalSave}
-              style={{ width: '100%', marginTop: '20px', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer' }}
-            >
-              <Save size={18} /> اعتماد وترحيل للمخزن
-            </button>
+                  </thead>
+                  <tbody>
+                    {finalReport.details.map(item => (
+                      <tr key={item.name} style={{ borderBottom: '1px solid #ddd' }}>
+                        <td>{item.name}</td>
+                        <td style={{ color: 'red' }}>{item.consumed}</td>
+                        <td style={{ color: 'green' }}>{item.surplus}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+             </div>
+             <button onClick={handleFinalSave} style={saveBtnStyle}>تأكيد وترحيل للمخزن</button>
+             <button onClick={() => setShowReport(false)} style={closeBtnStyle}>إغلاق</button>
           </div>
         </div>
       )}
@@ -230,13 +221,19 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   );
 };
 
-// الستايلات
-const infoCard = { background: '#fff', padding: '8px 10px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '5px', flex: 1, boxShadow: '0 2px 5px rgba(0,0,0,0.05)' };
-const borderlessInput = { border: 'none', outline: 'none', fontSize: '0.75rem', width: '100%', background: 'transparent', cursor: 'pointer' };
-const ingBox = { background: '#f8fafc', padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', display: 'flex', flexDirection: 'column' };
-const ingInput = { width: '100%', border: 'none', background: 'transparent', borderBottom: '2px solid #1e5631', textAlign: 'center', fontSize: '1rem', fontWeight: 'bold', outline: 'none', margin: '5px 0' };
-const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '15px' };
-const modalContent = { background: '#fff', width: '100%', maxWidth: '400px', borderRadius: '20px', padding: '20px' };
-const tdStyle = { padding: '8px', textAlign: 'center' };
+// الستايلات المضافة
+const headerStyle = { background: '#fff', padding: '15px', borderRadius: '12px', marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' };
+const addSectionStyle = { marginBottom: '15px' };
+const selectStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '2px solid #1e5631', fontSize: '1rem', outline: 'none' };
+const gridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' };
+const ingBox = { background: '#fff', padding: '10px', borderRadius: '10px', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' };
+const ingInput = { width: '100%', border: 'none', borderBottom: '2px solid #1e5631', textAlign: 'center', fontSize: '1.1rem', marginTop: '8px', outline: 'none' };
+const mainBtnStyle = { width: '100%', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px' };
+const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', zIndex: 1000 };
+const modalContent = { background: '#fff', padding: '20px', borderRadius: '20px', width: '100%', maxWidth: '400px' };
+const resultBadge = { background: '#f0fdf4', padding: '15px', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#1e5631', fontWeight: 'bold', fontSize: '1.5rem' };
+const saveBtnStyle = { width: '100%', padding: '12px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '8px', marginTop: '10px', fontWeight: 'bold' };
+const closeBtnStyle = { width: '100%', padding: '10px', background: '#ccc', border: 'none', borderRadius: '8px', marginTop: '5px' };
+const iconBtnStyle = { border: 'none', background: 'none', cursor: 'pointer' };
 
 export default ProductionManager;
