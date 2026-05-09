@@ -5,11 +5,10 @@ import {
 import Swal from 'sweetalert2';
 
 const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) => {
-  const [activeTab, setActiveTab] = useState('raw'); // 'raw', 'finished', 'log'
+  const [activeTab, setActiveTab] = useState('raw');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
-  // سجل العمليات - مخزن محلياً
   const [inventoryLog, setInventoryLog] = useState(() => {
     try {
       const savedLog = localStorage.getItem('inventory_logs');
@@ -27,20 +26,16 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
     category: 'raw'
   });
 
-  // حفظ السجل تلقائياً
   useEffect(() => {
     localStorage.setItem('inventory_logs', JSON.stringify(inventoryLog));
   }, [inventoryLog]);
 
-  // منطق تصفية البيانات المطور
   const filteredData = useMemo(() => {
     const safeCategories = Array.isArray(categories) ? categories : [];
-    
     let baseList = safeCategories.filter(item => {
       if (!item.name) return false;
       const itemName = item.name.toLowerCase();
       const matchesSearch = itemName.includes(searchTerm.toLowerCase());
-      
       if (activeTab === 'raw') {
         return matchesSearch && !itemName.includes("معمول") && !itemName.includes("جاهز");
       } else if (activeTab === 'finished') {
@@ -48,43 +43,46 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
       }
       return false;
     });
-
     return baseList.map(item => ({
       ...item,
       total: (Number(item.balance) || 0) * (Number(item.price) || 0)
     }));
   }, [activeTab, categories, searchTerm]);
 
-  // إحصائيات
   const stats = useMemo(() => {
     const totalValue = filteredData.reduce((sum, item) => sum + item.total, 0);
     const lowStock = filteredData.filter(item => Number(item.balance) < 10).length;
     return { totalValue, lowStock };
   }, [filteredData]);
 
-  // معالجة الإضافة / التوريد
+  // --- دالة تحويل الأرقام العربية لضمان عمل الزر ---
+  const arToEn = (str) => {
+    if (!str) return "";
+    return str.toString().replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+  };
+
   const handleProcessEntry = (e) => {
-    if(e) e.preventDefault(); // منع تحديث الصفحة
+    if(e) e.preventDefault();
 
-    const { name, balance, price, unit } = newItem;
+    // تحويل المدخلات لأرقام إنجليزية قبل المعالجة
+    const cleanBalance = arToEn(newItem.balance);
+    const cleanPrice = arToEn(newItem.price);
 
-    if (!name || !balance || !price) {
+    if (!newItem.name || !cleanBalance || !cleanPrice) {
       Swal.fire({ title: 'بيانات ناقصة', text: 'يرجى إكمال جميع الحقول', icon: 'warning', confirmButtonText: 'حسناً' });
       return;
     }
 
-    const qty = Number(balance);
-    const cost = Number(price);
+    const qty = Number(cleanBalance);
+    const cost = Number(cleanPrice);
     const entryDate = new Date().toLocaleString('ar-EG');
-    const normalizedNewName = name.trim();
+    const normalizedNewName = newItem.name.trim();
 
-    // البحث عن الصنف
     const existingItem = categories.find(item => 
       item.name.trim().toLowerCase() === normalizedNewName.toLowerCase()
     );
 
     if (existingItem) {
-      // تحديث صنف موجود
       const updatedData = {
         ...existingItem,
         balance: (Number(existingItem.balance) || 0) + qty,
@@ -92,11 +90,10 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
       };
       onUpdateItem(updatedData);
     } else {
-      // إضافة صنف جديد
       const newEntry = {
         id: `item-${Date.now()}`,
         name: normalizedNewName,
-        unit,
+        unit: newItem.unit,
         balance: qty,
         price: cost,
         category: normalizedNewName.includes("معمول") || normalizedNewName.includes("جاهز") ? 'finished' : 'raw',
@@ -105,7 +102,6 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
       onAddItem(newEntry);
     }
 
-    // إضافة للسجل
     const logEntry = {
       id: Date.now(),
       date: entryDate,
@@ -130,7 +126,6 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
 
   return (
     <div style={containerStyle}>
-      {/* Cards Stats */}
       <div style={statsRow}>
         <div style={statCard}>
           <BarChart3 color="#16a34a" size={24} />
@@ -148,7 +143,6 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
         </div>
       </div>
 
-      {/* Control Bar */}
       <div style={headerActions}>
         <div style={searchWrapper}>
           <Search size={18} color="#94a3b8" />
@@ -164,7 +158,6 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
         </button>
       </div>
 
-      {/* Tabs */}
       <div style={tabBar}>
         <button onClick={() => setActiveTab('raw')} style={activeTab === 'raw' ? activeTabBtn : tabBtn}>
           <Package size={16} /> خامات أولية
@@ -177,7 +170,6 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
         </button>
       </div>
 
-      {/* Main Content Area */}
       {activeTab === 'log' ? (
         <div style={tableContainer} className="glass-card">
           <table style={tableStyle}>
@@ -239,7 +231,6 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
         </div>
       )}
 
-      {/* Modal - Improved UI */}
       {isAddModalOpen && (
         <div style={overlay}>
           <div style={modal} className="glass-card">
@@ -267,11 +258,11 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
               <div style={row}>
                 <div style={inputGroup}>
                   <label style={labelStyle}>الكمية</label>
-                  <input type="number" required style={modalInput} value={newItem.balance} onChange={e => setNewItem({...newItem, balance: e.target.value})} />
+                  <input type="text" inputMode="numeric" required style={modalInput} value={newItem.balance} onChange={e => setNewItem({...newItem, balance: e.target.value})} />
                 </div>
                 <div style={inputGroup}>
                   <label style={labelStyle}>السعر الحالي</label>
-                  <input type="number" required style={modalInput} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+                  <input type="text" inputMode="numeric" required style={modalInput} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
                 </div>
               </div>
 
@@ -287,7 +278,7 @@ const Inventory = ({ categories = [], onAddItem, onDeleteItem, onUpdateItem }) =
   );
 };
 
-// --- الستايلات (مع تحسينات طفيفة) ---
+// --- الستايلات ---
 const containerStyle = { padding: '20px', direction: 'rtl', fontFamily: 'sans-serif', backgroundColor: '#f8fafc', minHeight: '100vh' };
 const statsRow = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };
 const statCard = { background: '#fff', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', borderRight: '5px solid #16a34a' };
