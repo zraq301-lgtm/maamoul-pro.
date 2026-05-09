@@ -2,19 +2,24 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   FileSpreadsheet, ArrowRight, Plus, Trash2, Package, Archive, 
   Layers, Activity, AlertTriangle, Table, LayoutGrid, TrendingUp, 
-  DollarSign, BarChart3, Save, X 
+  DollarSign, BarChart3, Save, X, History, ArrowDownCircle
 } from 'lucide-react';
 import DataGrid from './DataGrid';
 import Swal from 'sweetalert2';
 
 const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateItem, setStock }) => {
   const [activeTab, setActiveTab] = useState('raw');
-  const [viewMode, setViewMode] = useState('grid'); // جعلنا عرض البطاقات هو الافتراضي للذكاء
+  const [viewMode, setViewMode] = useState('grid'); 
   const [gridData, setGridData] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // نظام سجل الإضافات (Excel View State)
+  const [inventoryLog, setInventoryLog] = useState(() => {
+    const savedLog = localStorage.getItem('inventory_logs');
+    return savedLog ? JSON.parse(savedLog) : [];
+  });
 
-  // حالة النموذج الجديد لإضافة صنف
   const [newItem, setNewItem] = useState({
     name: '',
     unit: 'كيلو',
@@ -23,7 +28,11 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
     category: 'raw'
   });
 
-  // حسابات إحصائية بنظام ERP
+  // حفظ السجل في التخزين المحلي عند التغيير
+  useEffect(() => {
+    localStorage.setItem('inventory_logs', JSON.stringify(inventoryLog));
+  }, [inventoryLog]);
+
   const stats = useMemo(() => {
     const totalValue = gridData.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
     const lowStockCount = gridData.filter(item => parseFloat(item.balance) < 5 && item.name).length;
@@ -31,17 +40,12 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
   }, [gridData]);
 
   useEffect(() => {
-    const lowStockItems = gridData.filter(item =>
-      item.name && item.balance !== '' && parseFloat(item.balance) < 5
-    );
-    setAlerts(lowStockItems);
-  }, [gridData]);
-
-  useEffect(() => {
     const safeCategories = Array.isArray(categories) ? categories : [];
     const filtered = activeTab === 'raw'
       ? safeCategories.filter(cat => cat.name && !cat.name.includes("معمول") && !cat.name.includes("جاهز"))
-      : safeCategories.filter(cat => cat.name && (cat.name.includes("معمول") || cat.name.includes("جاهز")));
+      : (activeTab === 'finished' 
+          ? safeCategories.filter(cat => cat.name && (cat.name.includes("معمول") || cat.name.includes("جاهز")))
+          : []); // تبويب السجل لا يعرض الأصناف هنا
 
     const initialRows = filtered.map(cat => ({
       ...cat,
@@ -51,62 +55,111 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
     setGridData(initialRows);
   }, [activeTab, categories]);
 
-  // دالة الحفظ الجديدة للمزامنة مع App.jsx والقاعدة
+  // --- النظام الذكي للإضافة والتحديث ---
   const handleAddNewItem = () => {
     if (!newItem.name || !newItem.balance || !newItem.price) {
       Swal.fire({ title: 'نقص بيانات', text: 'يرجى ملء جميع الحقول الأساسية', icon: 'warning', timer: 2000 });
       return;
     }
 
-    const itemToAdd = {
-      ...newItem,
-      id: `item-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
-      balance: parseFloat(newItem.balance),
-      price: parseFloat(newItem.price),
-      total: parseFloat(newItem.balance) * parseFloat(newItem.price)
-    };
+    const qty = parseFloat(newItem.balance);
+    const price = parseFloat(newItem.price);
+    const entryDate = new Date().toISOString().split('T')[0];
 
-    // إرسال البيانات للأب (App.jsx) ليقوم بحفظها في localStorage أو قاعدة البيانات
-    if (onAddItem) {
-      onAddItem(itemToAdd);
-    } else if (setStock) {
-      setStock(prev => [...prev, itemToAdd]);
+    // 1. إضافة الحركة إلى سجل الإكسيل (History Log)
+    const logEntry = {
+      id: Date.now(),
+      date: entryDate,
+      name: newItem.name,
+      unit: newItem.unit,
+      quantity: qty,
+      price: price,
+      total: qty * price,
+      type: 'إضافة'
+    };
+    setInventoryLog(prev => [logEntry, ...prev]);
+
+    // 2. البحث عن الصنف في المخزن الحالي (الذكاء البرمجي)
+    const existingItem = categories.find(item => item.name === newItem.name);
+
+    if (existingItem) {
+      // تحديث الصنف الموجود
+      const updatedItem = {
+        ...existingItem,
+        balance: parseFloat(existingItem.balance) + qty,
+        price: price, // تحديث السعر لآخر سعر توريد
+        total: (parseFloat(existingItem.balance) + qty) * price
+      };
+      if (onUpdateItem) onUpdateItem(updatedItem);
+    } else {
+      // فتح فئة جديدة (إضافة صنف جديد)
+      const itemToAdd = {
+        ...newItem,
+        id: `item-${Date.now()}`,
+        date: entryDate,
+        balance: qty,
+        price: price,
+        total: qty * price
+      };
+      if (onAddItem) onAddItem(itemToAdd);
     }
 
-    Swal.fire({ title: 'تمت الإضافة', text: 'تم تسجيل الصنف بنجاح في المخزن', icon: 'success', timer: 1500 });
+    Swal.fire({ title: 'تم التحديث', text: 'تمت معالجة البيانات بنظام ERP الذكي', icon: 'success', timer: 1500 });
     setIsAddModalOpen(false);
     setNewItem({ name: '', unit: 'كيلو', balance: '', price: '', category: 'raw' });
   };
 
-  // بطاقة المنتج الذكية (ERP Card)
+  // واجهة عرض جدول الإكسيل (سجل الحركات)
+  const ExcelView = () => (
+    <div className="glass-card" style={{ overflowX: 'auto', background: '#fff', borderRadius: '15px' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.85rem' }}>
+        <thead>
+          <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+            <th style={tableHeaderStyle}>التاريخ</th>
+            <th style={tableHeaderStyle}>الصنف</th>
+            <th style={tableHeaderStyle}>الكمية</th>
+            <th style={tableHeaderStyle}>السعر</th>
+            <th style={tableHeaderStyle}>الإجمالي</th>
+          </tr>
+        </thead>
+        <tbody>
+          {inventoryLog.map(log => (
+            <tr key={log.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <td style={tableCellStyle}>{log.date}</td>
+              <td style={tableCellStyle}><strong>{log.name}</strong></td>
+              <td style={{ ...tableCellStyle, color: '#1e5631' }}>{log.quantity} {log.unit}</td>
+              <td style={tableCellStyle}>{log.price.toLocaleString()} ج.م</td>
+              <td style={{ ...tableCellStyle, fontWeight: 'bold' }}>{log.total.toLocaleString()} ج.م</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {inventoryLog.length === 0 && <p style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>لا توجد حركات مسجلة</p>}
+    </div>
+  );
+
   const ProductCard = ({ item }) => (
     <div className="glass-card" style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
         <div style={{ background: '#1e563120', padding: '10px', borderRadius: '12px' }}>
           <Package size={20} color="#1e5631" />
         </div>
-        <button onClick={() => handleDeleteProcess(item.id)} style={{ border: 'none', background: 'none', color: '#ef4444' }}>
+        <button onClick={() => onDeleteItem && onDeleteItem(item.id)} style={{ border: 'none', background: 'none', color: '#ef4444' }}>
           <Trash2 size={18} />
         </button>
       </div>
-      
       <h3 style={{ margin: '0 0 5px 0', fontSize: '1rem', fontWeight: 'bold' }}>{item.name}</h3>
       <span style={{ fontSize: '0.75rem', color: '#64748b' }}>وحدة القياس: {item.unit}</span>
-
       <div style={cardGridStyle}>
         <div>
           <p style={labelSmall}>الرصيد</p>
-          <p style={{ ...valueMedium, color: parseFloat(item.balance) < 5 ? '#ef4444' : '#1e293b' }}>
-            {item.balance}
-          </p>
+          <p style={{ ...valueMedium, color: parseFloat(item.balance) < 5 ? '#ef4444' : '#1e293b' }}>{item.balance}</p>
         </div>
         <div>
           <p style={labelSmall}>التكلفة/وحدة</p>
           <p style={valueMedium}>{parseFloat(item.price).toLocaleString()} ج.م</p>
         </div>
       </div>
-
       <div style={cardFooterStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <DollarSign size={14} />
@@ -120,7 +173,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', paddingBottom: '120px' }}>
       
-      {/* قسم الإحصائيات الذكي */}
+      {/* قسم الإحصائيات */}
       <div style={statsContainer}>
         <div style={statBox}>
           <BarChart3 size={20} color="#1e5631" />
@@ -138,15 +191,14 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
         </div>
       </div>
 
-      {/* الرأس والأزرار */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900' }}>المستودع الذكي</h2>
+        <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '900' }}>المستودع الذكي ERP</h2>
         <button onClick={() => setIsAddModalOpen(true)} style={addBtnMain}>
-          <Plus size={20} /> إضافة صنف جديد
+          <Plus size={20} /> إضافة / توريد
         </button>
       </div>
 
-      {/* تبديل التبويبات */}
+      {/* التبويبات المحدثة */}
       <div style={tabContainer}>
         <button onClick={() => setActiveTab('raw')} style={activeTab === 'raw' ? activeTabStyle : tabStyle}>
           <Layers size={18} /> المواد الخام
@@ -154,31 +206,32 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
         <button onClick={() => setActiveTab('finished')} style={activeTab === 'finished' ? activeTabStyle : tabStyle}>
           <Archive size={18} /> المنتج النهائي
         </button>
+        <button onClick={() => setActiveTab('log')} style={activeTab === 'log' ? activeTabStyle : tabStyle}>
+          <FileSpreadsheet size={18} /> سجل الوارد (Excel)
+        </button>
       </div>
 
-      {/* عرض البيانات */}
-      {viewMode === 'grid' ? (
+      {/* عرض البيانات بناءً على التبويب */}
+      {activeTab === 'log' ? (
+        <ExcelView />
+      ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
           {gridData.map(item => <ProductCard key={item.id} item={item} />)}
-          {gridData.length === 0 && <p style={{ textAlign: 'center', color: '#94a3b8', gridColumn: '1/-1' }}>لا توجد بيانات متاحة حالياً</p>}
-        </div>
-      ) : (
-        <div className="glass-card" style={{ padding: '10px' }}>
-           <DataGrid data={gridData} columns={gridColumns} onCellEdit={handleCellEdit} />
+          {gridData.length === 0 && <p style={{ textAlign: 'center', color: '#94a3b8', gridColumn: '1/-1' }}>لا توجد أصناف في هذا القسم</p>}
         </div>
       )}
 
-      {/* نافذة إضافة منتج (ERP Modal) */}
+      {/* نافذة الإضافة */}
       {isAddModalOpen && (
         <div style={modalOverlay}>
           <div className="glass-card" style={modalContent}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-              <h3 style={{ margin: 0 }}>تخزين صنف جديد</h3>
+              <h3 style={{ margin: 0 }}>نظام التوريد الذكي</h3>
               <X onClick={() => setIsAddModalOpen(false)} style={{ cursor: 'pointer' }} />
             </div>
             
             <div style={formGroup}>
-              <label style={labelSmall}>اسم الصنف</label>
+              <label style={labelSmall}>اسم الصنف (سيتم البحث عنه تلقائياً)</label>
               <input 
                 style={inputStyle} 
                 value={newItem.name} 
@@ -189,7 +242,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div style={formGroup}>
-                <label style={labelSmall}>الكمية</label>
+                <label style={labelSmall}>الكمية المضافة</label>
                 <input 
                   type="number" 
                   style={inputStyle} 
@@ -198,7 +251,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
                 />
               </div>
               <div style={formGroup}>
-                <label style={labelSmall}>سعر الوحدة</label>
+                <label style={labelSmall}>سعر الوحدة الحالي</label>
                 <input 
                   type="number" 
                   style={inputStyle} 
@@ -209,7 +262,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
             </div>
 
             <button onClick={handleAddNewItem} style={saveBtn}>
-              <Save size={18} /> حفظ وتحديث القاعدة
+              <Save size={18} /> معالجة وحفظ البيانات
             </button>
           </div>
         </div>
@@ -218,7 +271,11 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
   );
 };
 
-// الستايلات المضافة (ERP Style)
+// ستايلات إضافية للجداول
+const tableHeaderStyle = { padding: '12px', background: '#f1f5f9', color: '#475569', fontWeight: 'bold' };
+const tableCellStyle = { padding: '12px', color: '#1e293b' };
+
+// الستايلات السابقة (نفس الواجهة)
 const statsContainer = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '25px' };
 const statBox = { background: '#fff', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderRight: '4px solid #1e5631' };
 const labelSmall = { fontSize: '0.7rem', color: '#64748b', margin: 0 };
