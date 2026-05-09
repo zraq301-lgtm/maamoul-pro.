@@ -50,46 +50,38 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
     return { totalValue, lowStockCount };
   }, [gridData]);
 
-  // --- تفعيل زر الحفظ وإصلاح معالجة الأرقام ---
+  // --- تحديث: رفع الرصيد الذكي للمواد الخام ---
   const handleAddNewItem = () => {
     if (!newItem.name || newItem.balance === '' || newItem.price === '') {
-      Swal.fire({ title: 'نقص بيانات', text: 'يرجى ملء جميع الحقول الأساسية', icon: 'warning', timer: 2000 });
+      Swal.fire({ title: 'نقص بيانات', text: 'يرجى ملء جميع الحقول', icon: 'warning', timer: 2000 });
       return;
     }
 
     const qtyToAdd = Number(newItem.balance);
     const newPrice = Number(newItem.price);
-    const entryDate = new Date().toISOString().split('T')[0];
+    const entryDate = new Date().toLocaleDateString('ar-EG');
 
-    // 1. تحديث سجل الإكسيل
-    const logEntry = {
-      id: Date.now(),
-      date: entryDate,
-      name: newItem.name,
-      unit: newItem.unit,
-      quantity: qtyToAdd,
-      price: newPrice,
-      total: qtyToAdd * newPrice,
-      type: 'إضافة'
-    };
-    setInventoryLog(prev => [logEntry, ...prev]);
-
-    // 2. البحث عن الصنف وتحديثه أو إضافة صنف جديد
-    const existingItem = categories.find(item => item.name.trim() === newItem.name.trim());
+    // 1. البحث عن الصنف بدقة (تجاهل المسافات الزائدة)
+    const existingItem = categories.find(item => 
+      item.name.trim().toLowerCase() === newItem.name.trim().toLowerCase()
+    );
 
     if (existingItem) {
+      // تحديث الرصيد الحالي (رفع الرصيد)
       const updatedItem = {
         ...existingItem,
         balance: Number(existingItem.balance) + qtyToAdd,
-        price: newPrice,
+        price: newPrice, // تحديث السعر لآخر سعر شراء
         total: (Number(existingItem.balance) + qtyToAdd) * newPrice
       };
       
       if (onUpdateItem) onUpdateItem(updatedItem);
     } else {
+      // إضافة صنف جديد كلياً
       const itemToAdd = {
         ...newItem,
         id: `item-${Date.now()}`,
+        name: newItem.name.trim(),
         date: entryDate,
         balance: qtyToAdd,
         price: newPrice,
@@ -99,7 +91,25 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
       if (onAddItem) onAddItem(itemToAdd);
     }
 
-    Swal.fire({ title: 'تم الحفظ', text: `تم تحديث مخزون ${newItem.name}`, icon: 'success', timer: 1500 });
+    // 2. تحديث سجل الواردات (Excel)
+    const logEntry = {
+      id: Date.now(),
+      date: entryDate,
+      name: newItem.name.trim(),
+      quantity: qtyToAdd,
+      price: newPrice,
+      total: qtyToAdd * newPrice,
+      unit: newItem.unit
+    };
+    setInventoryLog(prev => [logEntry, ...prev]);
+
+    Swal.fire({ 
+      title: 'تم التحديث', 
+      text: existingItem ? `تم رفع رصيد ${newItem.name}` : `تم إضافة صنف جديد`, 
+      icon: 'success', 
+      timer: 1500 
+    });
+
     setIsAddModalOpen(false);
     setNewItem({ name: '', unit: 'كيلو', balance: '', price: '', category: 'raw' });
   };
@@ -141,16 +151,16 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
           <Trash2 size={18} />
         </button>
       </div>
-      <h3 style={{ margin: '0 0 5px 0', fontSize: '1.1rem', fontWeight: 'bold' }}>{item.name}</h3>
+      <h3 style={{ margin: '0 0 5px 0', fontSize: '1.2rem', fontWeight: 'bold' }}>{item.name}</h3>
       <div style={cardGridStyle}>
         <div>
           <p style={labelSmall}>الرصيد</p>
-          <p style={{ ...valueMedium, color: Number(item.balance) < 5 ? '#ef4444' : '#1e293b' }}>
+          <p style={{ ...valueMedium, fontSize: '1.2rem', color: Number(item.balance) < 5 ? '#ef4444' : '#1e293b' }}>
             {item.balance} {item.unit}
           </p>
         </div>
         <div>
-          <p style={labelSmall}>السعر</p>
+          <p style={labelSmall}>آخر سعر</p>
           <p style={valueMedium}>{Number(item.price).toLocaleString()} ج.م</p>
         </div>
       </div>
@@ -163,7 +173,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
         <div style={statBox}>
           <BarChart3 size={20} color="#1e5631" />
           <div style={{ marginRight: '10px' }}>
-            <p style={labelSmall}>إجمالي القيمة</p>
+            <p style={labelSmall}>قيمة المخزون</p>
             <p style={{ fontWeight: 'bold' }}>{stats.totalValue.toLocaleString()} ج.م</p>
           </div>
         </div>
@@ -177,7 +187,7 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '1.1rem', margin: 0 }}>المخزن</h2>
+        <h2 style={{ fontSize: '1.2rem', margin: 0 }}>المخزن</h2>
         <button onClick={() => setIsAddModalOpen(true)} style={addBtnMain}>
           <Plus size={18} /> توريد جديد
         </button>
@@ -198,9 +208,9 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
       {isAddModalOpen && (
         <div style={modalOverlay}>
           <div className="glass-card" style={modalContent}>
-            <h3 style={{ marginTop: 0 }}>إضافة توريد للمخزن</h3>
+            <h3 style={{ marginTop: 0 }}>إضافة توريد (رفع رصيد)</h3>
             <div style={formGroup}>
-              <label style={labelSmall}>اسم الصنف</label>
+              <label style={labelSmall}>اسم الصنف (تأكد من الاسم لرفع الرصيد)</label>
               <input style={inputStyle} value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="دقيق، سكر..." />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -213,8 +223,8 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
                 <input type="number" style={inputStyle} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
               </div>
             </div>
-            <button onClick={handleAddNewItem} style={saveBtn}><Save size={18} /> حفظ البيانات</button>
-            <button onClick={() => setIsAddModalOpen(false)} style={{ ...saveBtn, background: '#ccc', marginTop: '8px' }}>إغلاق</button>
+            <button onClick={handleAddNewItem} style={saveBtn}><Save size={18} /> حفظ وتحديث</button>
+            <button onClick={() => setIsAddModalOpen(false)} style={{ ...saveBtn, background: '#ccc', marginTop: '8px' }}>إلغاء</button>
           </div>
         </div>
       )}
@@ -222,22 +232,23 @@ const Inventory = ({ categories = [], onBack, onAddItem, onDeleteItem, onUpdateI
   );
 };
 
+// الستايلات
 const tableHeaderStyle = { padding: '10px', background: '#f8fafc', textAlign: 'right' };
 const tableCellStyle = { padding: '10px', borderBottom: '1px solid #f1f5f9' };
 const statsContainer = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' };
 const statBox = { background: '#fff', padding: '15px', borderRadius: '15px', display: 'flex', alignItems: 'center', borderRight: '4px solid #1e5631', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' };
 const labelSmall = { fontSize: '0.7rem', color: '#64748b', margin: 0 };
-const valueMedium = { fontSize: '0.95rem', fontWeight: 'bold', margin: 0 };
-const cardStyle = { background: '#fff', padding: '15px', borderRadius: '20px', boxShadow: '0 3px 10px rgba(0,0,0,0.04)' };
+const valueMedium = { fontSize: '1rem', fontWeight: 'bold', margin: 0 };
+const cardStyle = { background: '#fff', padding: '20px', borderRadius: '25px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' };
 const cardGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px', borderTop: '1px solid #f1f5f9', paddingTop: '10px' };
 const tabContainer = { display: 'flex', background: '#e2e8f0', padding: '4px', borderRadius: '12px', marginBottom: '15px' };
-const tabStyle = { flex: 1, padding: '8px', border: 'none', background: 'transparent', cursor: 'pointer' };
+const tabStyle = { flex: 1, padding: '10px', border: 'none', background: 'transparent', cursor: 'pointer' };
 const activeTabStyle = { ...tabStyle, background: '#fff', fontWeight: 'bold', borderRadius: '10px' };
-const addBtnMain = { background: '#1e5631', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '10px', display: 'flex', gap: '5px', alignItems: 'center' };
+const addBtnMain = { background: '#1e5631', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '10px', display: 'flex', gap: '5px', alignItems: 'center' };
 const modalOverlay = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 };
-const modalContent = { background: '#fff', width: '90%', maxWidth: '350px', padding: '20px', borderRadius: '20px' };
+const modalContent = { background: '#fff', width: '90%', maxWidth: '350px', padding: '25px', borderRadius: '25px' };
 const formGroup = { marginBottom: '12px' };
-const inputStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', marginTop: '4px' };
+const inputStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', marginTop: '4px' };
 const saveBtn = { width: '100%', padding: '12px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', display: 'flex', justifyContent: 'center', gap: '8px' };
 
 export default Inventory;
