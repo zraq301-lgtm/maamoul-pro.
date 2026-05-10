@@ -18,7 +18,6 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
       const name = (item.name || '').toLowerCase();
       const matchesSearch = name.includes(searchTerm.toLowerCase());
       
-      // منطق ذكي: هل هو منتج نهائي أم مادة خام؟
       const isFinished = name.includes("معمول") || name.includes("جاهز") || item.category === 'finished';
       
       if (activeTab === 'raw') return matchesSearch && !isFinished;
@@ -27,9 +26,8 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
     });
   }, [activeTab, categories, searchTerm]);
 
-  // 2. دالة تصدير الإكسيل (تعرض فقط المواد الخام الحالية بناءً على طلبك)
+  // 2. دالة تصدير الإكسيل
   const exportRawMaterialsToExcel = () => {
-    // تصفية المواد الخام فقط من كل البيانات
     const rawMaterials = categories.filter(item => {
       const name = (item.name || '').toLowerCase();
       return !(name.includes("معمول") || name.includes("جاهز") || item.category === 'finished');
@@ -54,35 +52,51 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
     XLSX.writeFile(wb, `Raw_Materials_${new Date().toLocaleDateString('ar-EG')}.xlsx`);
   };
 
-  // 3. التعامل مع التوريد وإرساله لـ App.jsx
+  // 3. دالة التوريد (المحدثة بمنطق دالة الشراء)
   const handleProcessEntry = (e) => {
     e.preventDefault();
     
-    if (!newItem.name || !newItem.balance) {
-      Swal.fire('خطأ', 'يرجى إدخال الاسم والكمية', 'error');
+    if (!newItem.name || !newItem.balance || !newItem.price) {
+      Swal.fire('خطأ', 'يرجى إكمال بيانات التوريد (الاسم، الكمية، والسعر)', 'error');
       return;
     }
 
+    // استخراج وتجهيز البيانات بنفس شكل "دالة الشراء"
     const entryData = {
-      name: newItem.name.trim(),
+      item: newItem.name.trim(), // تم تغيير المفتاح لـ item ليتوافق مع سجل المشتريات
       quantity: Number(newItem.balance),
-      price: Number(newItem.price) || 0,
+      price: Number(newItem.price),
       unit: newItem.unit,
-      type: 'supply', // تحديد أنها عملية توريد
-      date: new Date().toISOString()
+      total: Number(newItem.balance) * Number(newItem.price),
+      id: Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      type: 'ERP_SUPPLY',
+      // إضافة معلومات الشحنة (Batch Info) كما في دالة الشراء
+      batchInfo: {
+        batchId: `B-SUP-${Date.now().toString().slice(-6)}`,
+        purchaseDate: new Date().toISOString().split('T')[0],
+        costPerUnit: parseFloat(newItem.price),
+        supplier: 'توريد داخلي/يدوي'
+      }
     };
 
-    // إرسال البيانات للأب App.jsx
+    // إرسال البيانات للأب (App.jsx) لتحديث المخزن والسجلات
     if (onInventoryEntry) {
       onInventoryEntry(entryData);
     }
 
     setIsAddModalOpen(false);
     setNewItem({ name: '', unit: 'كيلو', balance: '', price: '' });
-    Swal.fire({ icon: 'success', title: 'تم إرسال البيانات للمخزن', timer: 1000, showConfirmButton: false });
+    
+    Swal.fire({ 
+      icon: 'success', 
+      title: 'تمت عملية التوريد', 
+      text: `تم إضافة شحنة برقم: ${entryData.batchInfo.batchId}`,
+      timer: 2000, 
+      showConfirmButton: false 
+    });
   };
 
-  // --- الستايلات (مطابقة للصورة المرفقة) ---
   const styles = {
     container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
     exportCard: { 
@@ -100,7 +114,6 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
 
   return (
     <div style={styles.container}>
-      {/* قسم التصدير */}
       <div style={styles.exportCard} onClick={exportRawMaterialsToExcel}>
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
            <div style={{textAlign: 'right'}}>
@@ -111,7 +124,6 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         </div>
       </div>
 
-      {/* البحث والتوريد */}
       <div style={styles.actionRow}>
         <button style={styles.addBtn} onClick={() => setIsAddModalOpen(true)}>
           <Plus size={20} /> توريد
@@ -127,7 +139,6 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         </div>
       </div>
 
-      {/* التبويبات */}
       <div style={styles.tabContainer}>
         <div 
           style={{...styles.tab, ...(activeTab === 'log' ? styles.activeTab : {})}} 
@@ -143,7 +154,6 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         >خامات</div>
       </div>
 
-      {/* قائمة المنتجات */}
       <div style={{paddingBottom: '80px'}}>
         {filteredData.map(item => (
           <div key={item.id} style={styles.itemCard}>
@@ -159,13 +169,12 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         ))}
       </div>
 
-      {/* مودال التوريد */}
       {isAddModalOpen && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
           <div style={{background: '#fff', width: '90%', borderRadius: '25px', padding: '25px'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
-              <h3>إجراء عملية توريد</h3>
-              <X onClick={() => setIsAddModalOpen(false)} />
+              <h3>إجراء عملية توريد للمخزن</h3>
+              <X onClick={() => setIsAddModalOpen(false)} style={{cursor:'pointer'}} />
             </div>
             <form onSubmit={handleProcessEntry}>
               <input 
@@ -174,6 +183,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
                 value={newItem.name}
                 onChange={e => setNewItem({...newItem, name: e.target.value})}
                 list="prev-items"
+                required
               />
               <datalist id="prev-items">
                 {categories.map(c => <option key={c.id} value={c.name} />)}
@@ -181,21 +191,33 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
               
               <div style={{display: 'flex', gap: '10px'}}>
                 <input 
-                  placeholder="الكمية" 
+                  placeholder="الكمية الواردة" 
                   type="number"
                   style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
                   value={newItem.balance}
                   onChange={e => setNewItem({...newItem, balance: e.target.value})}
+                  required
                 />
                 <input 
-                  placeholder="السعر" 
+                  placeholder="سعر الوحدة" 
                   type="number"
                   style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
                   value={newItem.price}
                   onChange={e => setNewItem({...newItem, price: e.target.value})}
+                  required
                 />
               </div>
-              <button type="submit" style={{...styles.addBtn, width: '100%', marginTop: '20px', padding: '15px'}}>تأكيد التوريد</button>
+              
+              {newItem.balance && newItem.price && (
+                <div style={{marginTop: '15px', textAlign: 'center', background: '#f0fdf4', padding: '10px', borderRadius: '10px', border: '1px solid #bbf7d0'}}>
+                  <small>إجمالي قيمة التوريد: </small>
+                  <strong style={{color: '#166534'}}>{(Number(newItem.balance) * Number(newItem.price)).toLocaleString()}</strong>
+                </div>
+              )}
+
+              <button type="submit" style={{...styles.addBtn, width: '100%', marginTop: '20px', padding: '15px'}}>
+                <Plus size={20} /> تأكيد وإضافة للمخزن
+              </button>
             </form>
           </div>
         </div>
