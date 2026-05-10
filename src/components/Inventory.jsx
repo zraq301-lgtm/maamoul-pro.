@@ -1,31 +1,102 @@
-import React from 'react';
-import { Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Package, Truck, Archive } from 'lucide-react';
 
-const RawMaterials = ({ categories, onDeleteItem }) => {
-  // تصفية الخامات فقط
-  const rawData = categories.filter(item => {
-    const name = (item.name || '').toLowerCase();
-    return !(name.includes("معمول") || name.includes("جاهز"));
-  });
+// استيراد الصفحات الثلاث من المسار الظاهر في صورتك على GitHub
+import RawMaterials from './Page/RawMaterials';
+import SupplyEntry from './Page/SupplyEntry';
+import FinishedProducts from './Page/FinishedProducts';
+
+const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
+  // هذه الحالة هي المسؤولة عن تحديد أي واجهة تظهر الآن
+  const [activeTab, setActiveTab] = useState('raw');
+
+  const styles = {
+    container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
+    // تصميم أزرار التنقل العلوية
+    tabContainer: { 
+      display: 'flex', 
+      background: '#fff', 
+      borderRadius: '20px', 
+      padding: '8px', 
+      marginBottom: '20px', 
+      boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+      position: 'sticky',
+      top: '10px',
+      zIndex: 10
+    },
+    tab: { 
+      flex: 1, 
+      padding: '12px', 
+      textAlign: 'center', 
+      borderRadius: '15px', 
+      cursor: 'pointer', 
+      transition: '0.3s', 
+      fontWeight: 'bold', 
+      color: '#64748b',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '8px',
+      fontSize: '14px'
+    },
+    activeTab: { background: '#22c55e', color: '#fff' },
+    contentArea: { marginTop: '10px' }
+  };
 
   return (
-    <div style={{ padding: '10px' }}>
-      {rawData.length > 0 ? rawData.map(item => (
-        <div key={item.id} style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <h3 style={{ margin: 0 }}>{item.name}</h3>
-            <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#666' }}>
-            <span>الرصيد: <b>{item.balance}</b></span>
-            <span>السعر: <b>{item.price}</b></span>
-          </div>
+    <div style={styles.container}>
+      {/* شريط التنقل - هو الذي سيحل مشكلة ظهور واجهة واحدة فقط */}
+      <div style={styles.tabContainer}>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('raw')}
+        >
+          <Archive size={18} /> الخامات
         </div>
-      )) : <p style={{ textAlign: 'center' }}>لا توجد خامات حالياً</p>}
+        <div 
+          style={{...styles.tab, ...(activeTab === 'supply' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('supply')}
+        >
+          <Truck size={18} /> توريد
+        </div>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'finished' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('finished')}
+        >
+          <Package size={18} /> منتجات
+        </div>
+      </div>
+
+      {/* منطقة عرض المحتوى - تفتح الصفحة المختارة فقط */}
+      <div style={styles.contentArea}>
+        
+        {/* واجهة الخامات */}
+        {activeTab === 'raw' && (
+          <RawMaterials 
+            categories={categories} 
+            onDeleteItem={onDeleteItem} 
+          />
+        )}
+
+        {/* واجهة تسجيل التوريد - ترسل البيانات إلى App.jsx */}
+        {activeTab === 'supply' && (
+          <SupplyEntry 
+            onInventoryEntry={onInventoryEntry} 
+            categories={categories} 
+          />
+        )}
+
+        {/* واجهة المنتجات النهائية */}
+        {activeTab === 'finished' && (
+          <FinishedProducts 
+            categories={categories} 
+            onDeleteItem={onDeleteItem} 
+          />
+        )}
+
+      </div>
     </div>
   );
 };
 
-const cardStyle = { background: '#fff', padding: '15px', borderRadius: '15px', marginBottom: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' };
-
-export default RawMaterials;
+export default Inventory;
