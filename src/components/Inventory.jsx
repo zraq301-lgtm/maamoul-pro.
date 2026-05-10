@@ -1,98 +1,246 @@
-name: "Nawah AI-OS Professional Build Pipeline"
+import React, { useState, useMemo } from 'react';
+import { 
+  Plus, Trash2, Search, X, Download 
+} from 'lucide-react';
+import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
+  const [activeTab, setActiveTab] = useState('raw');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newItem, setNewItem] = useState({ name: '', unit: 'كيلو', balance: '', price: '' });
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  // 1. تصفية البيانات للعرض بناءً على التبويب المختار
+  const filteredData = useMemo(() => {
+    const safeData = Array.isArray(categories) ? categories : [];
+    return safeData.filter(item => {
+      const name = (item.name || '').toLowerCase();
+      const matchesSearch = name.includes(searchTerm.toLowerCase());
+      
+      const isFinished = name.includes("معمول") || name.includes("جاهز") || item.category === 'finished';
+      
+      if (activeTab === 'raw') return matchesSearch && !isFinished;
+      if (activeTab === 'finished') return matchesSearch && isFinished;
+      return false;
+    });
+  }, [activeTab, categories, searchTerm]);
 
-    steps:
-      - name: 1. Checkout Code
-        uses: actions/checkout@v4
+  // 2. دالة تصدير الإكسيل
+  const exportRawMaterialsToExcel = () => {
+    const rawMaterials = categories.filter(item => {
+      const name = (item.name || '').toLowerCase();
+      return !(name.includes("معمول") || name.includes("جاهز") || item.category === 'finished');
+    });
 
-      - name: 2. Setup Node.js (v22)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
+    if (rawMaterials.length === 0) {
+      Swal.fire('تنبيه', 'لا توجد مواد خام لتصديرها حالياً', 'info');
+      return;
+    }
 
-      - name: 3. Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+    const dataToExport = rawMaterials.map(item => ({
+      'اسم المادة الخام': item.name,
+      'الرصيد': item.balance,
+      'الوحدة': item.unit || 'كيلو',
+      'السعر': item.price,
+      'إجمالي القيمة': (Number(item.balance) * Number(item.price)).toFixed(2)
+    }));
 
-      - name: 4. Build Web Project (Vite)
-        run: |
-          npm install --legacy-peer-deps
-          npm run build
-          # ضمان المزامنة مع مجلد www المطلوب لـ Capacitor
-          mkdir -p www
-          cp -r dist/* www/
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "المواد الخام");
+    XLSX.writeFile(wb, `Raw_Materials_${new Date().toLocaleDateString('ar-EG')}.xlsx`);
+  };
 
-      - name: 5. Clean & Rebuild Android Platform
-        run: |
-          rm -rf android
-          npx cap add android
-          npx cap sync android
+  // 3. دالة التوريد (المدمج بها منطق processPurchase)
+  const handleProcessEntry = (e) => {
+    e.preventDefault();
+    
+    // محاكاة كائن formData من المدخلات الحالية
+    const formData = {
+      item: newItem.name.trim(),
+      quantity: newItem.balance,
+      price: newItem.price,
+      unit: newItem.unit,
+      date: new Date().toISOString().split('T')[0],
+      supplier: 'توريد داخلي'
+    };
 
-      - name: 6. Inject Nawah Identity & Firebase
-        run: |
-          mkdir -p android/app/
-          # حقن ملف google-services مع تحديث المعرف الجديد
-          cat <<EOF > android/app/google-services.json
-          {
-            "project_info": { "project_number": "162488255991", "project_id": "nawah-aios" },
-            "client": [ { "client_info": { "mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2", "android_client_info": { "package_name": "com.nawah.aios" } }, "api_key": [ { "current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],
-            "configuration_version": "1"
-          }
-          EOF
-          
-          # تحديث الـ Namespace والـ Application ID برمجياً ليتوافق مع Nawah
-          sed -i 's/namespace ".*"/namespace "com.nawah.aios"/' android/app/build.gradle
-          sed -i 's/applicationId ".*"/applicationId "com.nawah.aios"/' android/app/build.gradle
-          
-          # تحديث اسم التطبيق في موارد الأندرويد
-          STRINGS="android/app/src/main/res/values/strings.xml"
-          if [ -f "$STRINGS" ]; then
-            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">Nawah AI-OS<\/string>/' $STRINGS
-          fi
+    try {
+      // --- دمج منطق processPurchase المستخرج ---
+      if (!formData.item || !formData.quantity || !formData.price) {
+        throw new Error("يرجى إكمال بيانات التوريد (الاسم، الكمية، والسعر)");
+      }
 
-      - name: 7. Native Android Compilation
-        working-directory: ./android
-        run: |
-          chmod +x gradlew
-          # حل تعارضات المكتبات الشائعة وزيادة سعة الذاكرة
-          echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
-          ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx3072m"
+      const purchaseWithBatch = {
+        ...formData,
+        quantity: parseFloat(formData.quantity),
+        price: parseFloat(formData.price),
+        total: parseFloat(formData.quantity) * parseFloat(formData.price),
+        id: Date.now(),
+        type: 'ERP_SUPPLY',
+        batchInfo: {
+          batchId: `B-${Date.now().toString().slice(-6)}`,
+          purchaseDate: formData.date,
+          costPerUnit: parseFloat(formData.price),
+          supplier: formData.supplier
+        }
+      };
+      // ------------------------------------------
 
-      - name: 8. Sign APK (Professional Mode)
-        run: |
-          # إنشاء مفتاح توقيع مؤقت للمشروع الجديد
-          keytool -genkey -v -keystore nawah.jks -alias nawah_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "nawah_pass_2026" -keypass "nawah_pass_2026" -dname "CN=NawahTeam, O=Nawah, C=EG" -noprompt
-          
-          APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
-          
-          # التوقيع النهائي للملف
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawah.jks --ks-pass pass:"nawah_pass_2026" --out Nawah-AIOS-Final.apk "$APK_PATH"
+      // إرسال البيانات للأب (الذي يستخدم دالة handlePurchaseComplete)
+      if (onInventoryEntry) {
+        onInventoryEntry(purchaseWithBatch);
+      }
 
-      - name: 9. Deploy to GitHub Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.0.${{ github.run_number }}
-          name: "Nawah AI-OS Release v2.0.${{ github.run_number }}"
-          body: |
-            ### 🚀 New Release Highlights
-            - Transitioned to Nawah AI-OS Ecosystem.
-            - Optimized Build Pipeline with Node.js 22.
-            - Enhanced Android integration and signing.
-          files: Nawah-AIOS-Final.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      setIsAddModalOpen(false);
+      setNewItem({ name: '', unit: 'كيلو', balance: '', price: '' });
+      
+      Swal.fire({ 
+        icon: 'success', 
+        title: 'تمت عملية التوريد', 
+        text: `تم إنشاء الشحنة رقم: ${purchaseWithBatch.batchInfo.batchId}`,
+        timer: 2000, 
+        showConfirmButton: false 
+      });
+
+    } catch (error) {
+      Swal.fire('خطأ', error.message, 'error');
+    }
+  };
+
+  const styles = {
+    container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
+    exportCard: { 
+      background: '#fff', padding: '20px', borderRadius: '20px', textAlign: 'center',
+      marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', cursor: 'pointer' 
+    },
+    actionRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
+    addBtn: { background: '#22c55e', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '15px', fontWeight: 'bold', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
+    searchBox: { flex: 2, background: '#fff', borderRadius: '15px', display: 'flex', alignItems: 'center', padding: '0 15px', border: '1px solid #e2e8f0' },
+    tabContainer: { display: 'flex', background: '#e2e8f0', borderRadius: '20px', padding: '5px', marginBottom: '20px' },
+    tab: { flex: 1, padding: '15px', textAlign: 'center', borderRadius: '15px', cursor: 'pointer', transition: '0.3s', fontWeight: 'bold' },
+    activeTab: { background: '#fff', color: '#22c55e' },
+    itemCard: { background: '#fff', borderRadius: '20px', padding: '20px', marginBottom: '15px', position: 'relative', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }
+  };
+
+  return (
+    <div style={styles.container}>
+      {/* قسم التصدير */}
+      <div style={styles.exportCard} onClick={exportRawMaterialsToExcel}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+           <div style={{textAlign: 'right'}}>
+              <h2 style={{margin: 0, fontSize: '22px'}}>تصدير إكسيل</h2>
+              <p style={{color: '#64748b', margin: '5px 0 0 0'}}>تحميل كافة بيانات المواد الخام</p>
+           </div>
+           <Download color="#22c55e" size={32} />
+        </div>
+      </div>
+
+      {/* البحث والتوريد */}
+      <div style={styles.actionRow}>
+        <button style={styles.addBtn} onClick={() => setIsAddModalOpen(true)}>
+          <Plus size={20} /> توريد
+        </button>
+        <div style={styles.searchBox}>
+          <Search size={18} color="#94a3b8" />
+          <input 
+            placeholder="بحث في المخازن..." 
+            style={{border: 'none', outline: 'none', padding: '10px', width: '100%'}}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* التبويبات */}
+      <div style={styles.tabContainer}>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'log' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('log')}
+        >سجل الوارد</div>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'finished' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('finished')}
+        >منتجات</div>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('raw')}
+        >خامات</div>
+      </div>
+
+      {/* قائمة المواد */}
+      <div style={{paddingBottom: '80px'}}>
+        {filteredData.map(item => (
+          <div key={item.id} style={styles.itemCard}>
+            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
+              <h3 style={{margin: 0}}>{item.name}</h3>
+              <Trash2 size={18} color="#ef4444" style={{cursor: 'pointer'}} onClick={() => onDeleteItem(item.id)} />
+            </div>
+            <div style={{display: 'flex', justifyContent: 'space-between', color: '#475569'}}>
+              <span>الرصيد: <b>{item.balance}</b></span>
+              <span>السعر: <b>{item.price}</b></span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* مودال التوريد */}
+      {isAddModalOpen && (
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+          <div style={{background: '#fff', width: '90%', borderRadius: '25px', padding: '25px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
+              <h3>إجراء عملية توريد للمخزن</h3>
+              <X onClick={() => setIsAddModalOpen(false)} style={{cursor:'pointer'}} />
+            </div>
+            <form onSubmit={handleProcessEntry}>
+              <input 
+                placeholder="اسم الصنف (مادة خام أو منتج)" 
+                style={{width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #ddd', marginBottom: '10px'}}
+                value={newItem.name}
+                onChange={e => setNewItem({...newItem, name: e.target.value})}
+                list="prev-items"
+                required
+              />
+              <datalist id="prev-items">
+                {categories.map(c => <option key={c.id} value={c.name} />)}
+              </datalist>
+              
+              <div style={{display: 'flex', gap: '10px'}}>
+                <input 
+                  placeholder="الكمية الواردة" 
+                  type="number"
+                  style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
+                  value={newItem.balance}
+                  onChange={e => setNewItem({...newItem, balance: e.target.value})}
+                  required
+                />
+                <input 
+                  placeholder="سعر الوحدة" 
+                  type="number"
+                  style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
+                  value={newItem.price}
+                  onChange={e => setNewItem({...newItem, price: e.target.value})}
+                  required
+                />
+              </div>
+              
+              {newItem.balance && newItem.price && (
+                <div style={{marginTop: '15px', textAlign: 'center', background: '#f0fdf4', padding: '10px', borderRadius: '10px', border: '1px solid #bbf7d0'}}>
+                  <small>إجمالي قيمة التوريد: </small>
+                  <strong style={{color: '#166534'}}>{(Number(newItem.balance) * Number(newItem.price)).toLocaleString()}</strong>
+                </div>
+              )}
+
+              <button type="submit" style={{...styles.addBtn, width: '100%', marginTop: '20px', padding: '15px'}}>
+                <Plus size={20} /> تأكيد وإضافة للمخزن
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Inventory;
