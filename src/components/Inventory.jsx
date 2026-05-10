@@ -11,17 +11,23 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', unit: 'كيلو', balance: '', price: '' });
 
-  // 1. تصفية البيانات للعرض بناءً على التبويب المختار
+  // 1. تصفية البيانات للعرض (تم التعديل لدعم item و name)
   const filteredData = useMemo(() => {
     const safeData = Array.isArray(categories) ? categories : [];
-    return safeData.filter(item => {
-      const name = (item.name || '').toLowerCase();
-      const matchesSearch = name.includes(searchTerm.toLowerCase());
+    return safeData.filter(itemData => {
+      // توحيد جلب الاسم من أي مصدر (شراء أو توريد يدوي)
+      const displayName = (itemData.name || itemData.item || '').toLowerCase();
+      const matchesSearch = displayName.includes(searchTerm.toLowerCase());
       
-      const isFinished = name.includes("معمول") || name.includes("جاهز") || item.category === 'finished';
+      // منطق التمييز بين المنتج النهائي والخامات
+      const isFinished = displayName.includes("معمول") || 
+                         displayName.includes("جاهز") || 
+                         itemData.category === 'finished';
       
       if (activeTab === 'raw') return matchesSearch && !isFinished;
       if (activeTab === 'finished') return matchesSearch && isFinished;
+      if (activeTab === 'log') return matchesSearch && itemData.batchInfo; // عرض العمليات المسجلة
+
       return false;
     });
   }, [activeTab, categories, searchTerm]);
@@ -29,7 +35,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
   // 2. دالة تصدير الإكسيل
   const exportRawMaterialsToExcel = () => {
     const rawMaterials = categories.filter(item => {
-      const name = (item.name || '').toLowerCase();
+      const name = (item.name || item.item || '').toLowerCase();
       return !(name.includes("معمول") || name.includes("جاهز") || item.category === 'finished');
     });
 
@@ -39,11 +45,11 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
     }
 
     const dataToExport = rawMaterials.map(item => ({
-      'اسم المادة الخام': item.name,
-      'الرصيد': item.balance,
+      'اسم المادة الخام': item.name || item.item,
+      'الرصيد': item.balance || item.quantity,
       'الوحدة': item.unit || 'كيلو',
       'السعر': item.price,
-      'إجمالي القيمة': (Number(item.balance) * Number(item.price)).toFixed(2)
+      'إجمالي القيمة': (Number(item.balance || item.quantity) * Number(item.price)).toFixed(2)
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -52,11 +58,10 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
     XLSX.writeFile(wb, `Raw_Materials_${new Date().toLocaleDateString('ar-EG')}.xlsx`);
   };
 
-  // 3. دالة التوريد (المدمج بها منطق processPurchase)
+  // 3. دالة معالجة التوريد (المدمجة)
   const handleProcessEntry = (e) => {
     e.preventDefault();
     
-    // محاكاة كائن formData من المدخلات الحالية
     const formData = {
       item: newItem.name.trim(),
       quantity: newItem.balance,
@@ -67,13 +72,14 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
     };
 
     try {
-      // --- دمج منطق processPurchase المستخرج ---
       if (!formData.item || !formData.quantity || !formData.price) {
-        throw new Error("يرجى إكمال بيانات التوريد (الاسم، الكمية، والسعر)");
+        throw new Error("يرجى إكمال بيانات التوريد");
       }
 
       const purchaseWithBatch = {
         ...formData,
+        name: formData.item, // نرسل الأثنين لضمان التوافق
+        balance: parseFloat(formData.quantity),
         quantity: parseFloat(formData.quantity),
         price: parseFloat(formData.price),
         total: parseFloat(formData.quantity) * parseFloat(formData.price),
@@ -86,9 +92,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
           supplier: formData.supplier
         }
       };
-      // ------------------------------------------
 
-      // إرسال البيانات للأب (الذي يستخدم دالة handlePurchaseComplete)
       if (onInventoryEntry) {
         onInventoryEntry(purchaseWithBatch);
       }
@@ -99,7 +103,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
       Swal.fire({ 
         icon: 'success', 
         title: 'تمت عملية التوريد', 
-        text: `تم إنشاء الشحنة رقم: ${purchaseWithBatch.batchInfo.batchId}`,
+        text: `رقم الشحنة: ${purchaseWithBatch.batchInfo.batchId}`,
         timer: 2000, 
         showConfirmButton: false 
       });
@@ -111,10 +115,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
 
   const styles = {
     container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
-    exportCard: { 
-      background: '#fff', padding: '20px', borderRadius: '20px', textAlign: 'center',
-      marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', cursor: 'pointer' 
-    },
+    exportCard: { background: '#fff', padding: '20px', borderRadius: '20px', textAlign: 'center', marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', cursor: 'pointer' },
     actionRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
     addBtn: { background: '#22c55e', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '15px', fontWeight: 'bold', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
     searchBox: { flex: 2, background: '#fff', borderRadius: '15px', display: 'flex', alignItems: 'center', padding: '0 15px', border: '1px solid #e2e8f0' },
@@ -126,18 +127,16 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
 
   return (
     <div style={styles.container}>
-      {/* قسم التصدير */}
       <div style={styles.exportCard} onClick={exportRawMaterialsToExcel}>
         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
            <div style={{textAlign: 'right'}}>
               <h2 style={{margin: 0, fontSize: '22px'}}>تصدير إكسيل</h2>
-              <p style={{color: '#64748b', margin: '5px 0 0 0'}}>تحميل كافة بيانات المواد الخام</p>
+              <p style={{color: '#64748b', margin: '5px 0 0 0'}}>تحميل بيانات المواد الخام</p>
            </div>
            <Download color="#22c55e" size={32} />
         </div>
       </div>
 
-      {/* البحث والتوريد */}
       <div style={styles.actionRow}>
         <button style={styles.addBtn} onClick={() => setIsAddModalOpen(true)}>
           <Plus size={20} /> توريد
@@ -145,7 +144,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         <div style={styles.searchBox}>
           <Search size={18} color="#94a3b8" />
           <input 
-            placeholder="بحث في المخازن..." 
+            placeholder="بحث..." 
             style={{border: 'none', outline: 'none', padding: '10px', width: '100%'}}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -153,49 +152,39 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         </div>
       </div>
 
-      {/* التبويبات */}
       <div style={styles.tabContainer}>
-        <div 
-          style={{...styles.tab, ...(activeTab === 'log' ? styles.activeTab : {})}} 
-          onClick={() => setActiveTab('log')}
-        >سجل الوارد</div>
-        <div 
-          style={{...styles.tab, ...(activeTab === 'finished' ? styles.activeTab : {})}} 
-          onClick={() => setActiveTab('finished')}
-        >منتجات</div>
-        <div 
-          style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} 
-          onClick={() => setActiveTab('raw')}
-        >خامات</div>
+        <div style={{...styles.tab, ...(activeTab === 'log' ? styles.activeTab : {})}} onClick={() => setActiveTab('log')}>سجل الوارد</div>
+        <div style={{...styles.tab, ...(activeTab === 'finished' ? styles.activeTab : {})}} onClick={() => setActiveTab('finished')}>منتجات</div>
+        <div style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} onClick={() => setActiveTab('raw')}>خامات</div>
       </div>
 
-      {/* قائمة المواد */}
-      <div style={{paddingBottom: '80px'}}>
+      <div>
         {filteredData.map(item => (
           <div key={item.id} style={styles.itemCard}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
-              <h3 style={{margin: 0}}>{item.name}</h3>
+              {/* عرض الاسم سواء كان مفتاحه item أو name */}
+              <h3 style={{margin: 0}}>{item.name || item.item}</h3>
               <Trash2 size={18} color="#ef4444" style={{cursor: 'pointer'}} onClick={() => onDeleteItem(item.id)} />
             </div>
             <div style={{display: 'flex', justifyContent: 'space-between', color: '#475569'}}>
-              <span>الرصيد: <b>{item.balance}</b></span>
+              {/* عرض الرصيد سواء كان مفتاحه balance أو quantity */}
+              <span>الرصيد: <b>{item.balance || item.quantity}</b></span>
               <span>السعر: <b>{item.price}</b></span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* مودال التوريد */}
       {isAddModalOpen && (
         <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
-          <div style={{background: '#fff', width: '90%', borderRadius: '25px', padding: '25px'}}>
+          <div style={{background: '#fff', width: '90%', maxWidth: '500px', borderRadius: '25px', padding: '25px'}}>
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
-              <h3>إجراء عملية توريد للمخزن</h3>
+              <h3>إضافة توريد جديد</h3>
               <X onClick={() => setIsAddModalOpen(false)} style={{cursor:'pointer'}} />
             </div>
             <form onSubmit={handleProcessEntry}>
               <input 
-                placeholder="اسم الصنف (مادة خام أو منتج)" 
+                placeholder="اسم الصنف" 
                 style={{width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #ddd', marginBottom: '10px'}}
                 value={newItem.name}
                 onChange={e => setNewItem({...newItem, name: e.target.value})}
@@ -203,12 +192,11 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
                 required
               />
               <datalist id="prev-items">
-                {categories.map(c => <option key={c.id} value={c.name} />)}
+                {categories.map(c => <option key={c.id} value={c.name || c.item} />)}
               </datalist>
-              
-              <div style={{display: 'flex', gap: '10px'}}>
+              <div style={{display: 'flex', gap: '10px', marginBottom: '10px'}}>
                 <input 
-                  placeholder="الكمية الواردة" 
+                  placeholder="الكمية" 
                   type="number"
                   style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
                   value={newItem.balance}
@@ -216,7 +204,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
                   required
                 />
                 <input 
-                  placeholder="سعر الوحدة" 
+                  placeholder="السعر" 
                   type="number"
                   style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
                   value={newItem.price}
@@ -224,17 +212,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
                   required
                 />
               </div>
-              
-              {newItem.balance && newItem.price && (
-                <div style={{marginTop: '15px', textAlign: 'center', background: '#f0fdf4', padding: '10px', borderRadius: '10px', border: '1px solid #bbf7d0'}}>
-                  <small>إجمالي قيمة التوريد: </small>
-                  <strong style={{color: '#166534'}}>{(Number(newItem.balance) * Number(newItem.price)).toLocaleString()}</strong>
-                </div>
-              )}
-
-              <button type="submit" style={{...styles.addBtn, width: '100%', marginTop: '20px', padding: '15px'}}>
-                <Plus size={20} /> تأكيد وإضافة للمخزن
-              </button>
+              <button type="submit" style={{...styles.addBtn, width: '100%', padding: '15px'}}>تأكيد التوريد</button>
             </form>
           </div>
         </div>
