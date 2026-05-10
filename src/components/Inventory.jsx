@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
-  Plus, Trash2, Search, X, Download, Package, History 
+  Plus, Trash2, Search, X, Download 
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
@@ -9,29 +9,16 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
   const [activeTab, setActiveTab] = useState('raw');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
-  // سجل العمليات المحلي
-  const [inventoryLog, setInventoryLog] = useState(() => {
-    try {
-      const saved = localStorage.getItem('inventory_logs');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) { return []; }
-  });
-
   const [newItem, setNewItem] = useState({ name: '', unit: 'كيلو', balance: '', price: '' });
 
-  useEffect(() => {
-    localStorage.setItem('inventory_logs', JSON.stringify(inventoryLog));
-  }, [inventoryLog]);
-
-  // منطق الفلترة الاحترافي
+  // 1. تصفية البيانات للعرض بناءً على التبويب المختار
   const filteredData = useMemo(() => {
     const safeData = Array.isArray(categories) ? categories : [];
     return safeData.filter(item => {
       const name = (item.name || '').toLowerCase();
-      const query = searchTerm.toLowerCase();
-      const matchesSearch = name.includes(query);
+      const matchesSearch = name.includes(searchTerm.toLowerCase());
       
+      // منطق ذكي: هل هو منتج نهائي أم مادة خام؟
       const isFinished = name.includes("معمول") || name.includes("جاهز") || item.category === 'finished';
       
       if (activeTab === 'raw') return matchesSearch && !isFinished;
@@ -40,198 +27,175 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
     });
   }, [activeTab, categories, searchTerm]);
 
-  const exportToExcel = () => {
-    const dataToExport = categories.map(item => ({
-      'الصنف': item.name,
-      'النوع': (item.name.includes("معمول") || item.name.includes("جاهز")) ? 'منتج نهائي' : 'مادة خام',
-      'الرصيد الحالي': item.balance,
-      'آخر سعر': item.price,
-      'القيمة الإجمالية': (Number(item.balance) * Number(item.price)).toFixed(2)
+  // 2. دالة تصدير الإكسيل (تعرض فقط المواد الخام الحالية بناءً على طلبك)
+  const exportRawMaterialsToExcel = () => {
+    // تصفية المواد الخام فقط من كل البيانات
+    const rawMaterials = categories.filter(item => {
+      const name = (item.name || '').toLowerCase();
+      return !(name.includes("معمول") || name.includes("جاهز") || item.category === 'finished');
+    });
+
+    if (rawMaterials.length === 0) {
+      Swal.fire('تنبيه', 'لا توجد مواد خام لتصديرها حالياً', 'info');
+      return;
+    }
+
+    const dataToExport = rawMaterials.map(item => ({
+      'اسم المادة الخام': item.name,
+      'الرصيد': item.balance,
+      'الوحدة': item.unit || 'كيلو',
+      'السعر': item.price,
+      'إجمالي القيمة': (Number(item.balance) * Number(item.price)).toFixed(2)
     }));
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "المخزن");
-    XLSX.writeFile(wb, `Inventory_Report.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "المواد الخام");
+    XLSX.writeFile(wb, `Raw_Materials_${new Date().toLocaleDateString('ar-EG')}.xlsx`);
   };
 
+  // 3. التعامل مع التوريد وإرساله لـ App.jsx
   const handleProcessEntry = (e) => {
     e.preventDefault();
+    
     if (!newItem.name || !newItem.balance) {
-      Swal.fire('تنبيه', 'برجاء إكمال البيانات الأساسية', 'warning');
+      Swal.fire('خطأ', 'يرجى إدخال الاسم والكمية', 'error');
       return;
     }
 
-    const payload = {
-      id: Date.now(),
+    const entryData = {
       name: newItem.name.trim(),
       quantity: Number(newItem.balance),
       price: Number(newItem.price) || 0,
       unit: newItem.unit,
+      type: 'supply', // تحديد أنها عملية توريد
       date: new Date().toISOString()
     };
 
-    if (onInventoryEntry) onInventoryEntry(payload);
+    // إرسال البيانات للأب App.jsx
+    if (onInventoryEntry) {
+      onInventoryEntry(entryData);
+    }
 
-    setInventoryLog(prev => [{ ...payload, displayDate: new Date().toLocaleString('ar-EG') }, ...prev]);
     setIsAddModalOpen(false);
     setNewItem({ name: '', unit: 'كيلو', balance: '', price: '' });
-    Swal.fire({ icon: 'success', title: 'تم التوريد', timer: 1000, showConfirmButton: false });
+    Swal.fire({ icon: 'success', title: 'تم إرسال البيانات للمخزن', timer: 1000, showConfirmButton: false });
   };
 
-  // --- كائن الستايلات لضمان عدم حدوث خطأ الصفحة البيضاء ---
+  // --- الستايلات (مطابقة للصورة المرفقة) ---
   const styles = {
-    container: { padding: '20px', direction: 'rtl', fontFamily: 'Arial, sans-serif' },
-    statsRow: { marginBottom: '20px' },
-    statCard: { 
-      background: '#fff', padding: '15px', borderRadius: '12px', 
-      display: 'flex', alignItems: 'center', gap: '15px', 
-      cursor: 'pointer', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' 
+    container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
+    exportCard: { 
+      background: '#fff', padding: '20px', borderRadius: '20px', textAlign: 'center',
+      marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.02)', cursor: 'pointer' 
     },
-    headerActions: { display: 'flex', gap: '10px', marginBottom: '20px' },
-    searchWrapper: { 
-      flex: 1, display: 'flex', alignItems: 'center', background: '#fff', 
-      borderRadius: '10px', padding: '0 10px', border: '1px solid #e2e8f0' 
-    },
-    searchInput: { border: 'none', padding: '10px', width: '100%', outline: 'none' },
-    addBtn: { 
-      background: '#16a34a', color: '#fff', border: 'none', 
-      padding: '10px 20px', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' 
-    },
-    tabBar: { display: 'flex', gap: '5px', background: '#e2e8f0', padding: '5px', borderRadius: '10px', marginBottom: '20px' },
-    tabBtn: { flex: 1, padding: '10px', border: 'none', borderRadius: '8px', cursor: 'pointer', transition: '0.3s' },
-    activeTabBtn: { background: '#fff', color: '#16a34a', fontWeight: 'bold' },
-    grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' },
-    card: { background: '#fff', padding: '15px', borderRadius: '15px', position: 'relative', border: '1px solid #eee' },
-    deleteBtn: { position: 'absolute', top: '10px', left: '10px', color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer' },
-    modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-    modalContent: { background: '#fff', width: '90%', maxWidth: '400px', padding: '25px', borderRadius: '20px' },
-    input: { width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #ddd', marginBottom: '10px', marginTop: '5px' }
+    actionRow: { display: 'flex', gap: '10px', marginBottom: '20px' },
+    addBtn: { background: '#22c55e', color: '#fff', border: 'none', padding: '12px 25px', borderRadius: '15px', fontWeight: 'bold', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' },
+    searchBox: { flex: 2, background: '#fff', borderRadius: '15px', display: 'flex', alignItems: 'center', padding: '0 15px', border: '1px solid #e2e8f0' },
+    tabContainer: { display: 'flex', background: '#e2e8f0', borderRadius: '20px', padding: '5px', marginBottom: '20px' },
+    tab: { flex: 1, padding: '15px', textAlign: 'center', borderRadius: '15px', cursor: 'pointer', transition: '0.3s', fontWeight: 'bold' },
+    activeTab: { background: '#fff', color: '#22c55e' },
+    itemCard: { background: '#fff', borderRadius: '20px', padding: '20px', marginBottom: '15px', position: 'relative', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }
   };
 
   return (
     <div style={styles.container}>
-      {/* تصدير البيانات */}
-      <div style={styles.statsRow}>
-        <div style={styles.statCard} onClick={exportToExcel}>
-          <Download color="#16a34a" />
-          <div>
-            <div style={{fontWeight: 'bold'}}>تصدير إكسيل</div>
-            <small style={{color: '#64748b'}}>تحميل كافة بيانات المخزن الحالي</small>
-          </div>
+      {/* قسم التصدير */}
+      <div style={styles.exportCard} onClick={exportRawMaterialsToExcel}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+           <div style={{textAlign: 'right'}}>
+              <h2 style={{margin: 0, fontSize: '22px'}}>تصدير إكسيل</h2>
+              <p style={{color: '#64748b', margin: '5px 0 0 0'}}>تحميل كافة بيانات المواد الخام</p>
+           </div>
+           <Download color="#22c55e" size={32} />
         </div>
       </div>
 
-      <div style={styles.headerActions}>
-        <div style={styles.searchWrapper}>
+      {/* البحث والتوريد */}
+      <div style={styles.actionRow}>
+        <button style={styles.addBtn} onClick={() => setIsAddModalOpen(true)}>
+          <Plus size={20} /> توريد
+        </button>
+        <div style={styles.searchBox}>
           <Search size={18} color="#94a3b8" />
           <input 
             placeholder="بحث في المخازن..." 
-            style={styles.searchInput} 
-            value={searchTerm} 
-            onChange={(e) => setSearchTerm(e.target.value)} 
+            style={{border: 'none', outline: 'none', padding: '10px', width: '100%'}}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <button onClick={() => setIsAddModalOpen(true)} style={styles.addBtn}><Plus size={18} /> توريد</button>
       </div>
 
       {/* التبويبات */}
-      <div style={styles.tabBar}>
-        <button 
-          onClick={() => setActiveTab('raw')} 
-          style={{...styles.tabBtn, ...(activeTab === 'raw' ? styles.activeTabBtn : {})}}
-        >خامات</button>
-        <button 
-          onClick={() => setActiveTab('finished')} 
-          style={{...styles.tabBtn, ...(activeTab === 'finished' ? styles.activeTabBtn : {})}}
-        >منتجات</button>
-        <button 
-          onClick={() => setActiveTab('log')} 
-          style={{...styles.tabBtn, ...(activeTab === 'log' ? styles.activeTabBtn : {})}}
-        >سجل الوارد</button>
+      <div style={styles.tabContainer}>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'log' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('log')}
+        >سجل الوارد</div>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'finished' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('finished')}
+        >منتجات</div>
+        <div 
+          style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} 
+          onClick={() => setActiveTab('raw')}
+        >خامات</div>
       </div>
 
-      {/* عرض المحتوى */}
-      {activeTab === 'log' ? (
-        <div style={{overflowX: 'auto', background: '#fff', borderRadius: '10px'}}>
-          <table style={{width: '100%', borderCollapse: 'collapse'}}>
-            <thead style={{background: '#f8fafc'}}>
-              <tr>
-                <th style={{padding: '12px', textAlign: 'right'}}>التاريخ</th>
-                <th style={{padding: '12px', textAlign: 'right'}}>الصنف</th>
-                <th style={{padding: '12px', textAlign: 'right'}}>الكمية</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventoryLog.map(log => (
-                <tr key={log.id} style={{borderTop: '1px solid #eee'}}>
-                  <td style={{padding: '12px'}}>{log.displayDate}</td>
-                  <td style={{padding: '12px'}}>{log.name}</td>
-                  <td style={{padding: '12px', color: '#16a34a'}}>+{log.quantity}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div style={styles.grid}>
-          {filteredData.map(item => (
-            <div key={item.id} style={styles.card}>
-              <h4 style={{margin: '0 0 10px 0'}}>{item.name}</h4>
-              <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '14px'}}>
-                <span>الرصيد: <b>{item.balance}</b></span>
-                <span>السعر: <b style={{color: '#16a34a'}}>{item.price}</b></span>
-              </div>
-              <button onClick={() => onDeleteItem(item.id)} style={styles.deleteBtn}><Trash2 size={16}/></button>
+      {/* قائمة المنتجات */}
+      <div style={{paddingBottom: '80px'}}>
+        {filteredData.map(item => (
+          <div key={item.id} style={styles.itemCard}>
+            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px'}}>
+              <h3 style={{margin: 0}}>{item.name}</h3>
+              <Trash2 size={18} color="#ef4444" style={{cursor: 'pointer'}} onClick={() => onDeleteItem(item.id)} />
             </div>
-          ))}
-        </div>
-      )}
+            <div style={{display: 'flex', justifyContent: 'space-between', color: '#475569'}}>
+              <span>الرصيد: <b>{item.balance}</b></span>
+              <span>السعر: <b>{item.price}</b></span>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* مودال التوريد */}
       {isAddModalOpen && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalContent}>
-            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
-              <h3>تسجيل عملية توريد</h3>
-              <X style={{cursor: 'pointer'}} onClick={() => setIsAddModalOpen(false)} />
+        <div style={{position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+          <div style={{background: '#fff', width: '90%', borderRadius: '25px', padding: '25px'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
+              <h3>إجراء عملية توريد</h3>
+              <X onClick={() => setIsAddModalOpen(false)} />
             </div>
             <form onSubmit={handleProcessEntry}>
-              <label style={{fontSize: '13px'}}>اسم الصنف</label>
               <input 
-                list="items-list"
-                style={styles.input} 
-                value={newItem.name} 
-                onChange={e => setNewItem({...newItem, name: e.target.value})} 
-                placeholder="ابحث أو أضف جديداً..."
-                required
+                placeholder="اسم الصنف (مادة خام أو منتج)" 
+                style={{width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #ddd', marginBottom: '10px'}}
+                value={newItem.name}
+                onChange={e => setNewItem({...newItem, name: e.target.value})}
+                list="prev-items"
               />
-              <datalist id="items-list">
+              <datalist id="prev-items">
                 {categories.map(c => <option key={c.id} value={c.name} />)}
               </datalist>
-
+              
               <div style={{display: 'flex', gap: '10px'}}>
-                <div style={{flex: 1}}>
-                  <label style={{fontSize: '13px'}}>الكمية</label>
-                  <input 
-                    type="number" 
-                    style={styles.input} 
-                    value={newItem.balance} 
-                    onChange={e => setNewItem({...newItem, balance: e.target.value})} 
-                    required
-                  />
-                </div>
-                <div style={{flex: 1}}>
-                  <label style={{fontSize: '13px'}}>السعر</label>
-                  <input 
-                    type="number" 
-                    style={styles.input} 
-                    value={newItem.price} 
-                    onChange={e => setNewItem({...newItem, price: e.target.value})} 
-                  />
-                </div>
+                <input 
+                  placeholder="الكمية" 
+                  type="number"
+                  style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
+                  value={newItem.balance}
+                  onChange={e => setNewItem({...newItem, balance: e.target.value})}
+                />
+                <input 
+                  placeholder="السعر" 
+                  type="number"
+                  style={{flex: 1, padding: '15px', borderRadius: '12px', border: '1px solid #ddd'}}
+                  value={newItem.price}
+                  onChange={e => setNewItem({...newItem, price: e.target.value})}
+                />
               </div>
-              <button type="submit" style={{...styles.addBtn, width: '100%', justifyContent: 'center', marginTop: '10px'}}>تأكيد العملية</button>
+              <button type="submit" style={{...styles.addBtn, width: '100%', marginTop: '20px', padding: '15px'}}>تأكيد التوريد</button>
             </form>
           </div>
         </div>
