@@ -261,7 +261,7 @@ const App = () => {
       case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.filter(s => s.status === 'نشط').length} />;
       case 'purchases': return <PurchasesManager {...cp} stock={stock} inventory={inventory} onPurchaseComplete={handleSavePurchase} onOrderTrigger={handleOrderTrigger} />;
       case 'suppliers': return <Suppliers {...cp} suppliers={suppliers} waitingList={supplierWaitingList} onAddSupplier={handleAddSupplier} onUpdateWaitingList={setSupplierWaitingList} onPayDebt={handlePaySupplierDebt} />;
-      case 'inventory': return <Inventory {...cp} categories={stock} setStock={setStock} onAddItem={handleDirectStockAdd} onDeleteItem={(id) => handleGenericDelete('stock', id, setStock)} />;
+      case 'inventory': return <Inventory {...cp} categories={stock} setStock={setStock} onAddItem={handleDirectStockAdd} onDeleteItem={(id) => handleGenericDelete('stock', id, setStock)} onInventoryEntry={handleSavePurchase} />;
       case 'sales': return <Sales {...cp} onSaveSale={handleSaveSale} customers={customers} stock={stock} />;
       case 'production': return <ProductionManager {...cp} stock={stock} setStock={setStock} onSaveProduction={handleSaveProduction} onSaveWaste={handleSaveWaste} />;
       case 'waste': return <Waste {...cp} inventory={stock} onSaveWaste={handleSaveWaste} />;
