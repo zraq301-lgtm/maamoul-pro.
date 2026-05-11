@@ -1,39 +1,44 @@
 import React, { useState } from 'react';
-import { Package, Truck, Calendar, Hash, DollarSign, ArrowRight, Save, ShoppingCart, Clock, Bell, Table, PlusCircle } from 'lucide-react';
+import { Package, Truck, Calendar, Hash, DollarSign, ArrowRight, Save, ShoppingCart, Bell, Table, AlertTriangle, User } from 'lucide-react';
 import DataGrid from './DataGrid';
 
 const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigger, inventory = [] }) => {
   const [activeView, setActiveView] = useState('menu');
-  const [isNewItem, setIsNewItem] = useState(false); // حالة للتبديل بين اختيار صنف أو إضافة جديد
+  const [isNewItem, setIsNewItem] = useState(false);
   
   const [formData, setFormData] = useState({
     item: '', unit: '', quantity: '', price: '',
     supplier: '', paymentMethod: 'كاش',
     date: new Date().toISOString().split('T')[0]
   });
-  const [orderRequest, setOrderRequest] = useState({ item: '', currentStock: 0, daysLeft: 0, neededQty: 0 });
 
-  // دالة التعامل مع اختيار صنف موجود مسبقاً
+  // حالة طلب الاحتياج تشمل الآن المورد
+  const [orderRequest, setOrderRequest] = useState({ 
+    item: '', currentStock: 0, daysLeft: 0, neededQty: '', supplier: '' 
+  });
+
+  // فحص الأصناف المنخفضة (أقل من 20) لإظهار التنبيه
+  const lowStockItems = stock.filter(s => s.balance <= 20);
+
   const handleExistingItemSelect = (itemName) => {
     if (itemName === "NEW_ITEM") {
       setIsNewItem(true);
       setFormData({ ...formData, item: '', unit: '', price: '' });
       return;
     }
-    
     const selected = stock.find(s => s.name === itemName);
     if (selected) {
       setFormData({
         ...formData,
         item: selected.name,
         unit: selected.unit || '',
-        price: selected.price || '' // جلب آخر سعر مسجل تلقائياً
+        price: selected.price || ''
       });
       setIsNewItem(false);
     }
   };
 
-  const handleItemSelect = (itemName) => {
+  const handleItemSelectForOrder = (itemName) => {
     const itemInStock = stock.find(s => s.name === itemName);
     const balance = itemInStock ? itemInStock.balance : 0;
     setOrderRequest({
@@ -55,7 +60,7 @@ const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigg
         type: 'ERP_ORDER'
       });
     }
-    alert(`تم إرسال طلب (${orderRequest.item}) لقسم الموردين بنجاح`);
+    alert(`تم إرسال طلب (${orderRequest.item}) للمورد (${orderRequest.supplier || 'عام'}) بنجاح`);
     setActiveView('menu');
   };
 
@@ -92,169 +97,150 @@ const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigg
     { key: 'paymentMethod', header: 'السداد', editable: false },
   ];
 
-  if (activeView === 'menu') {
-    return (
-      <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
-        <div className="page-header">
-          <ShoppingCart size={28} color="#1e5631" />
-          <h2 style={{ margin: 0 }}>نظام المشتريات ERP</h2>
+  return (
+    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh', position: 'relative' }}>
+      
+      {/* تنبيه انخفاض المخزن - يظهر فقط عند وجود أصناف أقل من 20 */}
+      {lowStockItems.length > 0 && (
+        <div style={{ 
+          background: '#fee2e2', 
+          border: '1px solid #ef4444', 
+          padding: '10px', 
+          borderRadius: '10px', 
+          marginBottom: '15px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px',
+          animation: 'pulse 2s infinite'
+        }}>
+          <AlertTriangle color="#ef4444" size={20} />
+          <marquee style={{ color: '#991b1b', fontSize: '0.85rem', fontWeight: 'bold' }}>
+            تنبيه: الأصناف التالية وصلت لحد إعادة الطلب (أقل من 20): {lowStockItems.map(i => `${i.name} (${i.balance})`).join(' - ')}
+          </marquee>
         </div>
+      )}
 
-        <div style={{ background: 'rgba(240, 253, 244, 0.8)', border: '1px solid rgba(30, 86, 49, 0.15)', padding: '12px', borderRadius: '15px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Bell size={20} color="#1e5631" />
-          <span style={{ fontSize: '0.8rem', color: '#065f46' }}>سيقوم النظام بتنبيهك عند نقص الخامات.</span>
-        </div>
-
-        <div style={{ display: 'grid', gap: '12px' }}>
-          <div className="glass-card" onClick={() => setActiveView('entry')} style={{ cursor: 'pointer', textAlign: 'right', borderRight: '8px solid #1e5631', display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{ background: 'rgba(240, 253, 244, 0.8)', padding: '12px', borderRadius: '12px' }}><Save size={24} color="#1e5631" /></div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>فاتورة مشتريات</h3>
-              <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>دخول خامات جديدة للمخزن</p>
-            </div>
+      {activeView === 'menu' && (
+        <>
+          <div className="page-header">
+            <ShoppingCart size={28} color="#1e5631" />
+            <h2 style={{ margin: 0 }}>نظام المشتريات ERP</h2>
           </div>
 
-          <div className="glass-card" onClick={() => setActiveView('orderRequest')} style={{ cursor: 'pointer', textAlign: 'right', borderRight: '8px solid #f59e0b', display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{ background: '#fffbeb', padding: '12px', borderRadius: '12px' }}><Truck size={24} color="#f59e0b" /></div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem' }}>طلب احتياج</h3>
-              <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>تنبيه الموردين بالنواقص</p>
-            </div>
+          <div style={{ background: 'rgba(240, 253, 244, 0.8)', border: '1px solid rgba(30, 86, 49, 0.15)', padding: '12px', borderRadius: '15px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Bell size={20} color="#1e5631" />
+            <span style={{ fontSize: '0.8rem', color: '#065f46' }}>تتبع حركة المشتريات والموردين هنا.</span>
           </div>
 
-          {inventory.length > 0 && (
-            <div className="glass-card" onClick={() => setActiveView('grid')} style={{ cursor: 'pointer', textAlign: 'right', borderRight: '8px solid #3498db', display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <div style={{ background: 'rgba(239, 246, 255, 0.8)', padding: '12px', borderRadius: '12px' }}><Table size={24} color="#3498db" /></div>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            <div className="glass-card" onClick={() => setActiveView('entry')} style={{ cursor: 'pointer', borderRight: '8px solid #1e5631', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{ background: 'rgba(240, 253, 244, 0.8)', padding: '12px', borderRadius: '12px' }}><Save size={24} color="#1e5631" /></div>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>سجل المشتريات</h3>
-                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>عرض وتصدير جميع فواتير الشراء</p>
+                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>فاتورة مشتريات</h3>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>دخول خامات جديدة للمخزن</p>
               </div>
             </div>
-          )}
-        </div>
 
-        <button onClick={onBack} className="btn-back" style={{ marginTop: '20px' }}><ArrowRight size={18} /> العودة للوحة التحكم</button>
-      </div>
-    );
-  }
+            <div className="glass-card" onClick={() => setActiveView('orderRequest')} style={{ cursor: 'pointer', borderRight: '8px solid #f59e0b', display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{ background: '#fffbeb', padding: '12px', borderRadius: '12px' }}><Truck size={24} color="#f59e0b" /></div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem' }}>طلب احتياج</h3>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>تنبيه الموردين بالنواقص</p>
+              </div>
+            </div>
 
-  if (activeView === 'grid') {
-    return (
-      <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
-        <div className="page-header">
-          <button onClick={() => setActiveView('menu')} style={{ border: 'none', background: 'rgba(240, 253, 244, 0.8)', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}><ArrowRight size={20} /></button>
-          <h3 style={{ margin: 0 }}>سجل المشتريات</h3>
-        </div>
-        <div className="glass-card" style={{ padding: '12px' }}>
-          <DataGrid columns={purchaseColumns} data={inventory} exportFileName="سجل_المشتريات" editable={false} />
-        </div>
-      </div>
-    );
-  }
+            {inventory.length > 0 && (
+              <div className="glass-card" onClick={() => setActiveView('grid')} style={{ cursor: 'pointer', borderRight: '8px solid #3498db', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <div style={{ background: 'rgba(239, 246, 255, 0.8)', padding: '12px', borderRadius: '12px' }}><Table size={24} color="#3498db" /></div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem' }}>سجل المشتريات</h3>
+                  <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>عرض وتصدير جميع الفواتير</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <button onClick={onBack} className="btn-back" style={{ marginTop: '20px' }}><ArrowRight size={18} /> العودة</button>
+        </>
+      )}
 
-  if (activeView === 'orderRequest') {
-    return (
-      <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
-        <div className="page-header">
-          <button onClick={() => setActiveView('menu')} style={{ border: 'none', background: 'rgba(240, 253, 244, 0.8)', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}><ArrowRight size={20} /></button>
-          <h3 style={{ margin: 0 }}>ERP - طلب احتياج</h3>
-        </div>
+      {activeView === 'orderRequest' && (
         <div className="glass-card">
+          <div className="page-header">
+            <button onClick={() => setActiveView('menu')} style={{ border: 'none', background: 'none' }}><ArrowRight size={20} /></button>
+            <h3 style={{ margin: 0 }}>طلب احتياج من مورد</h3>
+          </div>
           <form onSubmit={handleSendToSuppliers}>
             <label className="form-label">الصنف المطلوب</label>
-            <select className="glass-input" required onChange={e => handleItemSelect(e.target.value)} style={{ marginBottom: '12px' }}>
+            <select className="glass-input" required onChange={e => handleItemSelectForOrder(e.target.value)} style={{ marginBottom: '12px' }}>
               <option value="">اختر صنف من المخزن...</option>
-              {stock.map(s => <option key={s.id} value={s.name}>{s.name} (رصيد: {s.balance})</option>)}
+              {stock.map(s => <option key={s.id} value={s.name}>{s.name} (المتاح: {s.balance})</option>)}
             </select>
 
-            {orderRequest.item && (
-              <div style={{ background: orderRequest.currentStock < 5 ? 'rgba(254, 226, 226, 0.8)' : 'rgba(240, 253, 244, 0.8)', padding: '14px', borderRadius: '14px', marginBottom: '12px', border: `1px solid ${orderRequest.currentStock < 5 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(30, 86, 49, 0.15)'}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <span style={{ fontSize: '0.8rem' }}>الرصيد المتاح:</span>
-                  <strong style={{ color: orderRequest.currentStock < 5 ? '#ef4444' : '#1e293b' }}>{orderRequest.currentStock}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.8rem' }}>الاستهلاك المتوقع:</span>
-                  <strong>{orderRequest.daysLeft} أيام</strong>
-                </div>
-              </div>
-            )}
+            <label className="form-label"><User size={16} /> اسم المورد</label>
+            <input 
+              className="glass-input" 
+              placeholder="اسم المورد الموجه له الطلب" 
+              value={orderRequest.supplier} 
+              onChange={e => setOrderRequest({...orderRequest, supplier: e.target.value})}
+              style={{ marginBottom: '12px' }}
+            />
 
             <label className="form-label">الكمية المطلوبة</label>
-            <input type="number" className="glass-input" placeholder="الكمية المطلوبة من المورد" required inputMode="decimal" onChange={e => setOrderRequest({ ...orderRequest, neededQty: e.target.value })} style={{ marginBottom: '15px' }} />
-            <button type="submit" className="btn-primary" style={{ backgroundColor: '#1e5631', boxShadow: '0 4px 15px rgba(30, 86, 49, 0.3)' }}><Truck size={20} /> إرسال للموردين</button>
+            <input type="number" className="glass-input" required placeholder="الكمية المطلوبة" value={orderRequest.neededQty} onChange={e => setOrderRequest({ ...orderRequest, neededQty: e.target.value })} style={{ marginBottom: '15px' }} />
+            
+            <button type="submit" className="btn-primary" style={{ backgroundColor: '#f59e0b' }}><Truck size={20} /> إرسال الطلب</button>
           </form>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  if (activeView === 'entry') {
-    return (
-      <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
-        <div className="page-header">
-          <button onClick={() => {setActiveView('menu'); setIsNewItem(false);}} style={{ border: 'none', background: 'rgba(240, 253, 244, 0.8)', padding: '8px', borderRadius: '50%', cursor: 'pointer' }}><ArrowRight size={20} /></button>
-          <h3 style={{ margin: 0 }}>تسجيل فاتورة شراء</h3>
-        </div>
+      {activeView === 'entry' && (
         <div className="glass-card">
+          <div className="page-header">
+            <button onClick={() => setActiveView('menu')} style={{ border: 'none', background: 'none' }}><ArrowRight size={20} /></button>
+            <h3 style={{ margin: 0 }}>فاتورة شراء جديدة</h3>
+          </div>
           <form onSubmit={handleSave}>
-            <label className="form-label"><Package size={16} color="#1e5631" /> اسم الصنف</label>
-            
-            {/* القائمة المنسدلة لاختيار صنف موجود */}
+            <label className="form-label">اسم الصنف</label>
             {!isNewItem ? (
-              <select 
-                className="glass-input" 
-                required 
-                value={formData.item}
-                onChange={e => handleExistingItemSelect(e.target.value)} 
-                style={{ marginBottom: '10px' }}
-              >
+              <select className="glass-input" required value={formData.item} onChange={e => handleExistingItemSelect(e.target.value)} style={{ marginBottom: '10px' }}>
                 <option value="">اختر من المخزن...</option>
                 {stock.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                <option value="NEW_ITEM" style={{color: '#1e5631', fontWeight: 'bold'}}>+ إضافة صنف جديد غير مسجل</option>
+                <option value="NEW_ITEM" style={{fontWeight: 'bold'}}>+ إضافة صنف جديد</option>
               </select>
             ) : (
-              <div style={{ position: 'relative' }}>
-                <input 
-                  className="glass-input" 
-                  placeholder="اكتب اسم الصنف الجديد هنا" 
-                  required 
-                  value={formData.item} 
-                  onChange={e => setFormData({ ...formData, item: e.target.value })} 
-                  style={{ marginBottom: '10px', paddingLeft: '40px' }} 
-                />
-                <button 
-                  type="button" 
-                  onClick={() => setIsNewItem(false)} 
-                  style={{ position: 'absolute', left: '10px', top: '10px', border: 'none', background: 'none', color: '#ef4444', fontSize: '0.7rem' }}
-                >إلغاء</button>
-              </div>
+              <input className="glass-input" placeholder="اسم الصنف الجديد" required value={formData.item} onChange={e => setFormData({ ...formData, item: e.target.value })} style={{ marginBottom: '10px' }} />
             )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <div><label className="form-label">الوحدة</label><input className="glass-input" placeholder="كيلو/كرتونة" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} style={{ marginBottom: '10px' }} /></div>
-              <div><label className="form-label"><Hash size={16} color="#1e5631" /> الكمية</label><input type="number" className="glass-input" required inputMode="decimal" value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} style={{ marginBottom: '10px' }} /></div>
+              <input className="glass-input" placeholder="الوحدة" value={formData.unit} onChange={e => setFormData({ ...formData, unit: e.target.value })} />
+              <input type="number" className="glass-input" placeholder="الكمية" required value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <div><label className="form-label"><DollarSign size={16} color="#1e5631" /> سعر الوحدة</label><input type="number" className="glass-input" required inputMode="decimal" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} style={{ marginBottom: '10px' }} /></div>
-              <div><label className="form-label">طريقة السداد</label><select className="glass-input" value={formData.paymentMethod} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })} style={{ marginBottom: '10px' }}><option value="كاش">كاش</option><option value="آجل">آجل</option></select></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px' }}>
+              <input type="number" className="glass-input" placeholder="السعر" required value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
+              <select className="glass-input" value={formData.paymentMethod} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })}>
+                <option value="كاش">كاش</option>
+                <option value="آجل">آجل</option>
+              </select>
             </div>
-            <label className="form-label"><Truck size={16} color="#1e5631" /> اسم المورد</label>
-            <input className="glass-input" placeholder="اختياري" value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} style={{ marginBottom: '10px' }} />
-            <label className="form-label"><Calendar size={16} color="#1e5631" /> التاريخ</label>
-            <input type="date" className="glass-input" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} style={{ marginBottom: '15px' }} />
-            {formData.quantity && formData.price && (
-              <div style={{ background: 'rgba(240, 253, 244, 0.8)', padding: '14px', borderRadius: '14px', marginBottom: '15px', textAlign: 'center', border: '1px solid rgba(30, 86, 49, 0.15)' }}>
-                <span style={{ fontSize: '0.9rem' }}>إجمالي الفاتورة: </span><strong style={{ fontSize: '1.2rem', color: '#1e5631' }}>{(parseFloat(formData.quantity) * parseFloat(formData.price)).toLocaleString()}</strong>
-              </div>
-            )}
-            <button type="submit" className="btn-primary" style={{ backgroundColor: '#1e5631', boxShadow: '0 4px 15px rgba(30, 86, 49, 0.3)' }}><Save size={20} /> تسجيل وإضافة للمخزن</button>
+            <label className="form-label" style={{ marginTop: '10px' }}>اسم المورد</label>
+            <input className="glass-input" placeholder="اسم المورد" value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} />
+            
+            <button type="submit" className="btn-primary" style={{ marginTop: '15px' }}><Save size={20} /> حفظ الفاتورة</button>
           </form>
         </div>
-      </div>
-    );
-  }
-  return null;
+      )}
+
+      {activeView === 'grid' && (
+        <div className="glass-card">
+          <div className="page-header">
+            <button onClick={() => setActiveView('menu')} style={{ border: 'none', background: 'none' }}><ArrowRight size={20} /></button>
+            <h3 style={{ margin: 0 }}>سجل الفواتير</h3>
+          </div>
+          <DataGrid columns={purchaseColumns} data={inventory} exportFileName="سجل_المشتريات" />
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default PurchasesManager;
