@@ -13,12 +13,13 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
     selectedIngredients: []
   });
 
-  // المكونات الافتراضية للطبخة
+  // المكونات الافتراضية للطبخة (النسبة لكل كرتونة)
   const GOLDEN_RECIPE = {
     "دقيق": 0.950, "سكر": 0.100, "عجوة": 0.055, "سمنة": 0.150,
     "زبدة": 0.050, "لبن": 0.280, "كارتون": 1, "تغليف": 0.020
   };
 
+  // تصفية المواد الخام
   const rawMaterials = useMemo(() => 
     stock.filter(item => item.name && !item.name.includes("معمول") && !item.name.includes("جاهز")),
     [stock]
@@ -35,7 +36,11 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   const calculateProduction = () => {
     const cartons = parseFloat(productionQty);
     if (!cartons || cartons <= 0) {
-      Swal.fire('خطأ', 'أدخل عدد الكراتين المنتجة', 'error');
+      Swal.fire('تنبيه', 'يرجى إدخال عدد الكراتين المنتجة أولاً', 'warning');
+      return;
+    }
+    if (formData.selectedIngredients.length === 0) {
+      Swal.fire('تنبيه', 'يرجى اختيار المواد الخام المستخدمة', 'warning');
       return;
     }
 
@@ -52,6 +57,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
   const handleFinalSave = () => {
     const PRODUCT_NAME = "معمول تمر فاخر (جاهز)";
     let totalCost = 0;
+    
     const updatedStock = stock.map(item => {
       const reportItem = finalReport.details.find(d => d.name === item.name);
       if (reportItem) {
@@ -89,183 +95,108 @@ const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) =
       details: finalReport.details
     });
 
-    Swal.fire('تم الترحيل', 'تم تحديث المخزن بنجاح', 'success');
+    Swal.fire('تم بنجاح', 'تم تحديث الأرصدة وإضافة المنتج النهائي', 'success');
     onBack();
   };
 
+  // --- كائنات الستايل الداخلية لضمان عدم حدوث خطأ الصفحة البيضاء ---
+  const styles = {
+    container: { direction: 'rtl', padding: '15px', fontFamily: "'Tajawal', sans-serif", backgroundColor: '#f8fafc', minHeight: '100vh' },
+    header: { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' },
+    backBtn: { border: 'none', background: '#fff', padding: '10px', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+    card: { background: '#fff', padding: '20px', borderRadius: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '20px' },
+    bigInput: { width: '100%', padding: '15px', fontSize: '2rem', textAlign: 'center', borderRadius: '15px', border: '2px solid #e2e8f0', color: '#1e5631', fontWeight: 'bold', outline: 'none' },
+    label: { display: 'block', marginBottom: '8px', fontWeight: 'bold', color: '#475569', fontSize: '0.9rem' },
+    select: { width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '1rem', outline: 'none', backgroundColor: '#fff' },
+    tag: { background: '#1e5631', color: '#fff', padding: '8px 12px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' },
+    mainBtn: { width: '100%', padding: '16px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '15px' },
+    grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px', marginTop: '15px' },
+    productCard: { background: '#fff', padding: '12px', borderRadius: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderTop: '4px solid #1e5631' },
+    overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' },
+    modal: { background: '#fff', padding: '25px', borderRadius: '25px', width: '90%', maxWidth: '400px' }
+  };
+
   return (
-    <div style={{ direction: 'rtl', padding: '15px', fontFamily: "'Tajawal', sans-serif", backgroundColor: '#f0f4f0', minHeight: '100vh' }}>
-      
-      {/* الهيدر */}
-      <div style={headerStyle}>
-        <button onClick={onBack} style={backBtnStyle}><ArrowLeft size={20} color="#1e5631" /></button>
-        <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#1e5631' }}>وحدة الإنتاج والتشغيل</h2>
+    <div style={styles.container}>
+      <div style={styles.header}>
+        <button onClick={onBack} style={styles.backBtn}><ArrowLeft size={22} /></button>
+        <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#1e293b' }}>وحدة الإنتاج</h2>
       </div>
 
-      {/* كارت إدخال الإنتاج */}
-      <div className="glass-card" style={{ padding: '20px', marginBottom: '20px', borderRight: '8px solid #1e5631' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-          <Factory color="#1e5631" />
-          <span style={{ fontWeight: 'bold' }}>إنتاج تشغيلة جديدة</span>
-        </div>
-        
-        <label style={labelStyle}>عدد الكراتين المراد إنتاجها:</label>
+      <div style={styles.card}>
+        <label style={styles.label}>كم عدد الكراتين (المعجونة)؟</label>
         <input 
           type="number" 
           value={productionQty} 
           onChange={e => setProductionQty(e.target.value)} 
-          style={bigInputStyle} 
+          style={styles.bigInput} 
           placeholder="0"
-          inputMode="decimal"
         />
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' }}>
-          <label style={{ fontSize: '0.9rem', color: '#64748b' }}>قطع/كرتونة:</label>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '15px', alignItems: 'center' }}>
+          <span style={styles.label}>قطع لكل كرتونة:</span>
           <input 
             type="number" 
             value={unitsPerCarton} 
             onChange={e => setUnitsPerCarton(e.target.value)} 
-            style={smallInputStyle}
+            style={{ width: '80px', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', textAlign: 'center' }}
           />
         </div>
       </div>
 
-      {/* اختيار الخامات */}
-      <div className="glass-card" style={{ padding: '15px', marginBottom: '20px' }}>
-        <p style={{ fontWeight: 'bold', marginBottom: '12px', fontSize: '0.9rem' }}>المواد الخام المستخدمة:</p>
+      <div style={styles.card}>
+        <label style={styles.label}>المواد الخام المستخدمة:</label>
         <select 
-          style={selectStyle}
+          style={styles.select}
           onChange={(e) => { addIngredient(e.target.value); e.target.value = ""; }}
         >
-          <option value="">+ إضافة مادة من المخزن</option>
-          {rawMaterials.map(m => <option key={m.id} value={m.name}>{m.name} (رصيد: {m.balance})</option>)}
+          <option value="">+ اضغط لاختيار مادة</option>
+          {rawMaterials.map(m => <option key={m.id} value={m.name}>{m.name} (المتاح: {m.balance})</option>)}
         </select>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '15px' }}>
           {formData.selectedIngredients.map(ing => (
-            <div key={ing.name} style={tagStyle}>
+            <div key={ing.name} style={styles.tag}>
               {ing.name}
-              <Trash2 size={14} style={{ cursor: 'pointer' }} onClick={() => setFormData(prev => ({...prev, selectedIngredients: prev.selectedIngredients.filter(i => i.name !== ing.name)}))} />
+              <Trash2 size={16} onClick={() => setFormData(prev => ({...prev, selectedIngredients: prev.selectedIngredients.filter(i => i.name !== ing.name)}))} style={{ cursor: 'pointer' }} />
             </div>
           ))}
         </div>
       </div>
 
-      <button onClick={calculateProduction} style={mainBtnStyle}>
-        <RefreshCw size={20} /> حساب التكاليف والترحيل للمخزن
+      <button onClick={calculateProduction} style={styles.mainBtn}>
+        <RefreshCw size={20} /> ترحيل الإنتاج للمخزن
       </button>
 
-      {/* عرض أصناف المخزن على شكل شبكة (Grid) */}
-      <div style={{ marginTop: '30px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-          <LayoutGrid size={22} color="#1e5631" />
-          <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e5631' }}>حالة المخزن الحالية (شبكة الأصناف)</h3>
-        </div>
-
-        <div style={gridContainerStyle}>
-          {stock.map(item => {
-            const isReady = item.name.includes("جاهز") || item.name.includes("معمول");
-            return (
-              <div key={item.id} style={{
-                ...productCardStyle,
-                borderTop: isReady ? '4px solid #1e5631' : '4px solid #3498db'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <Package size={18} color={isReady ? "#1e5631" : "#3498db"} />
-                  <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>{isReady ? 'منتج نهائي' : 'خامة'}</span>
-                </div>
-                <div style={itemNameStyle}>{item.name}</div>
-                <div style={itemBalanceStyle}>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>الرصيد:</span>
-                  <span style={{ color: parseFloat(item.balance) <= 0 ? '#ef4444' : '#1e293b' }}>
-                    {item.balance} {item.unit}
-                  </span>
-                </div>
-                <div style={itemPriceStyle}>{item.price} ج.م</div>
-              </div>
-            );
-          })}
-        </div>
+      {/* عرض الشبكة (Grid) أسفل الصفحة */}
+      <h3 style={{ marginTop: '25px', fontSize: '1rem', color: '#475569' }}>
+        <LayoutGrid size={18} style={{ verticalAlign: 'middle', marginLeft: '8px' }} />
+        حالة المخزن الآن
+      </h3>
+      <div style={styles.grid}>
+        {stock.map(item => (
+          <div key={item.id} style={{ ...styles.productCard, borderTopColor: item.name.includes("جاهز") ? "#1e5631" : "#3498db" }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '5px' }}>{item.name}</div>
+            <div style={{ fontSize: '0.9rem', color: '#1e5631', fontWeight: '900' }}>{item.balance} <small style={{ fontWeight: 'normal', color: '#64748b' }}>{item.unit}</small></div>
+          </div>
+        ))}
       </div>
 
-      {/* المودال الخاص بالتقرير */}
+      {/* مودال التأكيد */}
       {showReport && (
-        <div style={modalOverlay}>
-          <div style={modalContent}>
-            <h3 style={{ textAlign: 'center', color: '#1e5631' }}>ملخص الإنتاج</h3>
-            <div style={summaryBox}>
-              <p>المنتج: <b>معمول تمر فاخر</b></p>
-              <p>الكمية المضافة: <b>{finalReport.totalUnits} قطعة</b></p>
-              <hr />
-              <p style={{ fontSize: '0.8rem' }}>سيتم خصم الخامات تلقائياً من الأرصدة الحالية.</p>
+        <div style={styles.overlay}>
+          <div style={styles.modal}>
+            <h3 style={{ textAlign: 'center', marginTop: 0 }}>تأكيد عملية الإنتاج</h3>
+            <div style={{ background: '#f0fdf4', padding: '15px', borderRadius: '15px', marginBottom: '20px' }}>
+              <p style={{ margin: '5px 0' }}>سيتم إضافة: <b>{finalReport.totalUnits} قطعة معمول</b></p>
+              <p style={{ margin: '5px 0', fontSize: '0.8rem', color: '#166534' }}>سيتم خصم الخامات المحددة تلقائياً.</p>
             </div>
-            <button onClick={handleFinalSave} style={confirmBtnStyle}>تأكيد الترحيل النهائي</button>
-            <button onClick={() => setShowReport(false)} style={cancelBtnStyle}>إغاء</button>
+            <button onClick={handleFinalSave} style={{ ...styles.mainBtn, marginTop: 0 }}>تأكيد وحفظ</button>
+            <button onClick={() => setShowReport(false)} style={{ ...styles.mainBtn, background: '#f1f5f9', color: '#64748b', marginTop: '10px' }}>إلغاء</button>
           </div>
         </div>
       )}
     </div>
   );
 };
-
-// الستايلات المضافة والمحدثة
-const gridContainerStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-  gap: '12px',
-  paddingBottom: '40px'
-};
-
-const productCardStyle = {
-  background: 'rgba(255, 255, 255, 0.9)',
-  padding: '12px',
-  borderRadius: '15px',
-  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '5px',
-  transition: 'transform 0.2s'
-};
-
-const itemNameStyle = {
-  fontSize: '0.85rem',
-  fontWeight: 'bold',
-  color: '#1e293b',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis'
-};
-
-const itemBalanceStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  fontSize: '0.9rem',
-  fontWeight: 'bold',
-  marginTop: '5px'
-};
-
-const itemPriceStyle = {
-  fontSize: '0.75rem',
-  color: '#059669',
-  background: '#ecfdf5',
-  padding: '2px 8px',
-  borderRadius: '5px',
-  width: 'fit-content',
-  marginTop: '5px'
-};
-
-const headerStyle = { display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' };
-const backBtnStyle = { border: 'none', background: '#fff', padding: '10px', borderRadius: '12px', cursor: 'pointer', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' };
-const labelStyle = { display: 'block', fontWeight: 'bold', marginBottom: '10px', color: '#1e5631', fontSize: '0.9rem' };
-const bigInputStyle = { width: '100%', padding: '12px', fontSize: '1.8rem', textAlign: 'center', borderRadius: '15px', border: '2px solid #e2e8f0', background: '#fff', fontWeight: '900', color: '#1e5631' };
-const smallInputStyle = { width: '70px', padding: '8px', textAlign: 'center', borderRadius: '10px', border: '1px solid #cbd5e1', fontWeight: 'bold' };
-const selectStyle = { width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid #cbd5e1', fontSize: '0.9rem', outline: 'none' };
-const tagStyle = { background: '#1e5631', color: '#fff', padding: '6px 14px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', boxShadow: '0 2px 4px rgba(30,86,49,0.2)' };
-const mainBtnStyle = { width: '100%', padding: '16px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px', boxShadow: '0 4px 15px rgba(30,86,49,0.3)' };
-const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px', backdropFilter: 'blur(4px)' };
-const modalContent = { background: '#fff', padding: '25px', borderRadius: '25px', width: '100%', maxWidth: '380px' };
-const summaryBox = { background: '#f0fdf4', padding: '15px', borderRadius: '15px', marginBottom: '20px', color: '#166534', border: '1px solid #dcfce7' };
-const confirmBtnStyle = { width: '100%', padding: '14px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const cancelBtnStyle = { width: '100%', padding: '12px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '12px', marginTop: '10px', cursor: 'pointer' };
 
 export default ProductionManager;
