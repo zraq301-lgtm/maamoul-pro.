@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
 import { Package, Truck, Archive } from 'lucide-react';
 
-// استيراد الصفحات الثلاث من المسار الظاهر في صورتك على GitHub
+// استيراد الصفحات الثلاث
 import RawMaterials from './Page/RawMaterials';
 import SupplyEntry from './Page/SupplyEntry';
 import FinishedProducts from './Page/FinishedProducts';
 
 const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
-  // هذه الحالة هي المسؤولة عن تحديد أي واجهة تظهر الآن
+  // الحالة المسؤولة عن تحديد أي واجهة تظهر الآن
   const [activeTab, setActiveTab] = useState('raw');
 
   const styles = {
     container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
-    // تصميم أزرار التنقل العلوية
     tabContainer: { 
       display: 'flex', 
       background: '#fff', 
@@ -45,7 +44,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
 
   return (
     <div style={styles.container}>
-      {/* شريط التنقل - هو الذي سيحل مشكلة ظهور واجهة واحدة فقط */}
+      {/* شريط التنقل */}
       <div style={styles.tabContainer}>
         <div 
           style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} 
@@ -67,7 +66,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         </div>
       </div>
 
-      {/* منطقة عرض المحتوى - تفتح الصفحة المختارة فقط */}
+      {/* منطقة عرض المحتوى */}
       <div style={styles.contentArea}>
         
         {/* واجهة الخامات */}
@@ -78,9 +77,10 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
           />
         )}
 
-        {/* واجهة تسجيل التوريد - ترسل البيانات إلى App.jsx */}
+        {/* واجهة تسجيل التوريد */}
         {activeTab === 'supply' && (
           <SupplyEntry 
+            // التأكد من تمرير الدالة هنا
             onInventoryEntry={onInventoryEntry} 
             categories={categories} 
           />
