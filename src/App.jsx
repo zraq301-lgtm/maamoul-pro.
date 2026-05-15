@@ -1,4 +1,4 @@
- import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { CapacitorHttp } from '@capacitor/core';
 
@@ -125,7 +125,7 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // 1. [الحل الجذري]: تفكيك المزامنة المحلية وتوزيعها لمنع انهيار الذاكرة (Memory Crash Fix)
+  // 1. مزامنة البيانات محلياً (منفصلة ومستقرة تماماً وبلا أي ثقل)
   useEffect(() => { localStorage.setItem('stock', JSON.stringify(stock)); }, [stock]);
   useEffect(() => { localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData]);
   useEffect(() => { localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory]);
@@ -138,16 +138,24 @@ const App = () => {
   useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
   useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
 
-  // 2. محرك المزامنة الخلفية المعزول تماماً (يعمل بهدوء في الخلفية دون أي تأثير على الـ UI)
+  // 2. [إغلاق الثغرة الحاسم]: مصفوفة مراقبة فارغة لمنع الـ Loops اللانهائية نهائياً
   useEffect(() => {
     const runBackgroundSync = async () => {
       try {
-        setSyncStatus('جاري الحفظ السحابي...');
-        const syncMap = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
+        setSyncStatus('جاري المزامنة السحابية...');
         
-        for (const [key, val] of Object.entries(syncMap)) {
-          if (Array.isArray(val) && val.length > 0) {
-            await syncWithNawahDB(key, val);
+        // جلب أحدث البيانات مباشرة من الـ LocalStorage لضمان عدم الاعتماد على الـ State المتقلب أثناء الـ Loop
+        const syncKeys = ['stock', 'salesData', 'inventory', 'expenses', 'waste', 'suppliers', 'customers', 'productionData', 'waitingList', 'cashBook', 'staff'];
+        
+        for (const key of syncKeys) {
+          const localData = localStorage.getItem(key);
+          if (localData) {
+            const parsed = JSON.parse(localData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              // تعديل مسمى المفتاح الخارجي ليتوافق مع قاعدة بيانات نواة
+              const collectionName = key === 'waitingList' ? 'supplierWaitingList' : key;
+              await syncWithNawahDB(collectionName, parsed);
+            }
           }
         }
         setSyncStatus('✅ سحابة مستقرة');
@@ -156,16 +164,16 @@ const App = () => {
       }
     };
 
-    // مهلة مريحة 8 ثوانٍ عند التشغيل لضمان استقرار التطبيق تماماً
-    const initialTimer = setTimeout(runBackgroundSync, 8000);
-    // تكرار آمن كل 60 ثانية لتوفير موارد الموبايل وبطاريته
+    // وقت انتظار آمن (10 ثوانٍ) لمنع أي تداخل أثناء فتح التطبيق
+    const initialTimer = setTimeout(runBackgroundSync, 10000);
+    // تكرار دوري مريح كل 60 ثانية لتوفير المعالج والبطارية
     const interval = setInterval(runBackgroundSync, 60000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
+  }, []); // 🌟 الحماية هنا: مصفوفة فارغة تعني التشغيل مرة واحدة فقط وجدولة الخلفية بأمان!
 
   // --- Financial Logic ---
   const financialStats = useMemo(() => {
