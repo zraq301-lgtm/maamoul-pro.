@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+ import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 import { CapacitorHttp } from '@capacitor/core';
 
@@ -125,46 +125,47 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // 1. الحفظ المحلي الفوري والمنفصل تماماً (خفيف وسريع جداً بدون أي شبكة)
-  useEffect(() => {
-    localStorage.setItem('stock', JSON.stringify(stock));
-    localStorage.setItem('salesData', JSON.stringify(salesData));
-    localStorage.setItem('inventory', JSON.stringify(inventory));
-    localStorage.setItem('expenses', JSON.stringify(expenses));
-    localStorage.setItem('waste', JSON.stringify(waste));
-    localStorage.setItem('suppliers', JSON.stringify(suppliers));
-    localStorage.setItem('customers', JSON.stringify(customers));
-    localStorage.setItem('productionData', JSON.stringify(productionData));
-    localStorage.setItem('waitingList', JSON.stringify(supplierWaitingList));
-    localStorage.setItem('cashBook', JSON.stringify(cashBook));
-    localStorage.setItem('staff', JSON.stringify(staff));
-  }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
+  // 1. [الحل الجذري]: تفكيك المزامنة المحلية وتوزيعها لمنع انهيار الذاكرة (Memory Crash Fix)
+  useEffect(() => { localStorage.setItem('stock', JSON.stringify(stock)); }, [stock]);
+  useEffect(() => { localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData]);
+  useEffect(() => { localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory]);
+  useEffect(() => { localStorage.setItem('expenses', JSON.stringify(expenses)); }, [expenses]);
+  useEffect(() => { localStorage.setItem('waste', JSON.stringify(waste)); }, [waste]);
+  useEffect(() => { localStorage.setItem('suppliers', JSON.stringify(suppliers)); }, [suppliers]);
+  useEffect(() => { localStorage.setItem('customers', JSON.stringify(customers)); }, [customers]);
+  useEffect(() => { localStorage.setItem('productionData', JSON.stringify(productionData)); }, [productionData]);
+  useEffect(() => { localStorage.setItem('waitingList', JSON.stringify(supplierWaitingList)); }, [supplierWaitingList]);
+  useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
+  useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
 
-  // 2. محرك المزامنة الخلفية المجدول (يعمل مرة كل 30 ثانية بهدوء ودون تجميد الواجهة)
+  // 2. محرك المزامنة الخلفية المعزول تماماً (يعمل بهدوء في الخلفية دون أي تأثير على الـ UI)
   useEffect(() => {
     const runBackgroundSync = async () => {
-      setSyncStatus('جاري الرفع الخلفي...');
-      const syncMap = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
-      
-      for (const [key, val] of Object.entries(syncMap)) {
-        if (Array.isArray(val) && val.length > 0) {
-          await syncWithNawahDB(key, val);
+      try {
+        setSyncStatus('جاري الحفظ السحابي...');
+        const syncMap = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
+        
+        for (const [key, val] of Object.entries(syncMap)) {
+          if (Array.isArray(val) && val.length > 0) {
+            await syncWithNawahDB(key, val);
+          }
         }
+        setSyncStatus('✅ سحابة مستقرة');
+      } catch (err) {
+        setSyncStatus('⚠️ خطأ اتصال');
       }
-      setSyncStatus('✅ سحابة مستقرة');
     };
 
-    // تشغيل أول مرة بعد فتح التطبيق بـ 5 ثوانٍ لراحة المعالج
-    const initialTimer = setTimeout(runBackgroundSync, 5000);
-
-    // ثم إعادة التشغيل دورياً كل 40 ثانية لتحديث البيانات دون ضغط
-    const interval = setInterval(runBackgroundSync, 40000);
+    // مهلة مريحة 8 ثوانٍ عند التشغيل لضمان استقرار التطبيق تماماً
+    const initialTimer = setTimeout(runBackgroundSync, 8000);
+    // تكرار آمن كل 60 ثانية لتوفير موارد الموبايل وبطاريته
+    const interval = setInterval(runBackgroundSync, 60000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, []); // مصفوفة فارغة تعني: لا تراقب الـ States ولا تكرر نفسك نهائياً!
+  }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
 
   // --- Financial Logic ---
   const financialStats = useMemo(() => {
