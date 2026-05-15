@@ -1,228 +1,226 @@
-import React, { useMemo, useState } from 'react';
-import { 
-  ShoppingCart, Tag, Factory, Warehouse, 
-  BarChart3, TrendingUp, Calendar, BrainCircuit, Loader2, Clock, Trash2
-} from 'lucide-react';
-import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { CapacitorHttp } from '@capacitor/core';
+import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
+import { CapacitorHttp } from '@capacitor/core';
 
-// --- معالجة الأيقونة بشكل احترافي لمنع خطأ الـ Build ---
-let LogoImage;
-try {
-  // محاولة استيراد الأيقونة، إذا فشلت سيتم استخدام رابط خارجي أو أيقونة افتراضية
-  LogoImage = await import('../services/icon-foreground.png').then(m => m.default).catch(() => "https://ui-avatars.com/api/?name=Zad+ElKhir&background=e67e22&color=fff");
-} catch (e) {
-  LogoImage = "https://ui-avatars.com/api/?name=Zad+ElKhir&background=e67e22&color=fff";
-}
+// استيراد المكونات
+import Dashboard from './components/Dashboard';
+import PurchasesManager from './components/PurchasesManager';
+import Sales from './components/Sales';
+import Waste from './components/Waste';
+import Expenses from './components/Expenses';
+import Suppliers from './components/Suppliers';
+import Financials from './components/Financials';
+import Reports from './components/Reports';
+import Customers from './components/Customers';
+import Inventory from './components/Inventory';
+import ProductionManager from './components/ProductionManager';
+import StaffManagement from './components/StaffManagement';
+import Settings from './components/Settings';
 
-const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = {}, fetchData, onDeleteItem }) => {
-  const [isAiLoading, setIsAiLoading] = useState(false);
+import './App.css';
 
-  // 1. معالجة بيانات الرسم البياني (محسنة لتجنب الأخطاء البرمجية)
-  const chartData = useMemo(() => {
-    if (!productionHistory || !Array.isArray(productionHistory) || productionHistory.length === 0) {
-      return [{ name: 'لا بيانات', كمية: 0, تكلفة: 0 }];
-    }
-    return productionHistory.map(item => ({
-      name: item.date ? item.date.split('-').slice(1).join('/') : '', 
-      كمية: parseFloat(item.products?.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0) || 0),
-      تكلفة: parseFloat(item.totalActualCost || 0)
-    })).slice(-7); 
-  }, [productionHistory]);
+// --- تم حذف سطر استيراد الأيقونة الذي يسبب فشل البناء نهائياً ---
 
-  // دالة الحذف الذكية (بدون تغيير في المنطق)
-  const handleDeleteProduction = async (id) => {
-    if (!id) return;
-    const result = await Swal.fire({
-      title: 'تأكيد الحذف',
-      text: "هل تريد حذف سجل الإنتاج هذا نهائياً؟",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'نعم، احذف',
-      cancelButtonText: 'إلغاء'
-    });
+// --- إعدادات مستودع Nawah AI-DB ---
+const DB_CONFIG = {
+  owner: 'zraq301-lgtm',
+  repo: 'Nawah-AI-db',
+  token: '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', 
+  tenant: 'nawah-core'
+};
 
-    if (result.isConfirmed) {
-      try {
-        if (typeof onDeleteItem === 'function') {
-           await onDeleteItem(id, 'production');
-        } else {
-           const response = await CapacitorHttp.post({
-             url: `https://maamoul-one.vercel.app/api/production`, 
-             headers: { 'Content-Type': 'application/json' },
-             data: { collectionName: 'production', id: id }
-           });
-           if (response.data && response.data.success) {
-             Swal.fire('تم الحفظ', 'تم مسح السجل بنجاح', 'success');
-             if (fetchData) await fetchData();
-           } else { throw new Error("فشل الحذف"); }
-        }
-      } catch (error) { Swal.fire('خطأ', 'فشل الوصول للـ API', 'error'); }
-    }
-  };
+const showSwal = (title, icon = 'success') => {
+  Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
+};
 
-  const generateTodayReport = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayProd = productionHistory.filter(p => p.date === today);
-    const totalCost = todayProd.reduce((sum, p) => sum + parseFloat(p.totalActualCost || 0), 0);
-    const lowStockCount = stock.filter(i => parseFloat(i.balance || i.quantity || 0) < 5).length;
+const App = () => {
+  const [activePage, setActivePage] = useState('dashboard');
 
-    Swal.fire({
-      title: '📊 تقرير حالة المصنع',
-      html: `<div style="text-align: right; font-family: 'Tajawal', sans-serif; line-height: 1.8;">
-          <p>📅 إنتاج اليوم: <b>${todayProd.length} وردية</b></p>
-          <p>💰 إجمالي تكلفة اليوم: <b style="color: #e67e22">${totalCost.toFixed(2)} ج.م</b></p>
-          <p>📦 أصناف المخزن: <b>${stock.length} صنف</b></p>
-          <p>⚠️ أصناف أوشكت على النفاذ: <b style="color: #ef4444">${lowStockCount}</b></p>
-        </div>`,
-      icon: 'info', confirmButtonText: 'ممتاز'
-    });
-  };
-
-  const analyzeWithAI = async () => {
-    if (!productionHistory.length && !stock.length) {
-        Swal.fire('تنبيه', 'لا توجد بيانات كافية للتحليل', 'warning');
-        return;
-    }
-    setIsAiLoading(true);
+  const loadInitial = (key, initialValue) => {
     try {
-      const analysisContext = {
-        recentProduction: productionHistory.slice(-5).map(p => ({ date: p.date, cost: p.totalActualCost })),
-        inventoryStatus: stock.map(s => ({ item: s.name, balance: s.balance })),
-        lowStockItems: stock.filter(s => s.balance < 5).map(s => s.name)
-      };
-      const response = await CapacitorHttp.post({
-        url: 'https://maamoul-one.vercel.app/api/raqqa-ai',
-        headers: { 'Content-Type': 'application/json' },
-        data: { prompt: `أنت مساعد ذكي لمصنع "زاد الخير". بناءً على البيانات: ${JSON.stringify(analysisContext)}، قدم نصيحة سريعة.` }
-      });
-      Swal.fire({ 
-        title: '🤖 تحليل زاد الخير الذكي', 
-        text: response.data?.message || response.data?.reply || "استمر على هذا الأداء!",
-        icon: 'success', confirmButtonText: 'فهمت'
-      });
-    } catch (error) {
-      Swal.fire('عذراً', 'الذكاء الصناعي مشغول حالياً', 'error');
-    } finally { setIsAiLoading(false); }
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : initialValue;
+    } catch (e) { return initialValue; }
   };
 
-  const sections = [
-    { id: 'production', title: 'تشغيل الإنتاج', icon: <Factory size={28} />, color: '#e67e22', desc: 'إضافة وردية جديدة' },
-    { id: 'inventory', title: 'إدارة المخزن', icon: <Warehouse size={28} />, color: '#3498db', desc: 'خامات ومنتجات' },
-  ];
+  // --- دالة تحويل النصوص العربية لـ Base64 بشكل صحيح لـ GitHub ---
+  const toBase64 = (str) => {
+    return btoa(unescape(encodeURIComponent(str)));
+  };
+
+  // --- محول البيانات (Schema Mapper) لضمان ظهورها في الأدمن ---
+  const mapDataToNawahSchema = (collectionName, data) => {
+    if (!Array.isArray(data)) return data;
+
+    return data.map(item => {
+      switch (collectionName) {
+        case 'inventory': // المشتريات
+          return {
+            id: item.id?.toString() || `INV-${Date.now()}`,
+            date: item.date || new Date().toISOString(),
+            vendorId: item.supplier || 'مورد عام', // تحويل supplier إلى vendorId
+            totalAmount: parseFloat(item.total || 0),
+            status: 'completed',
+            items: item.items || [{
+              productId: item.item,
+              name: item.item,
+              quantity: parseFloat(item.quantity || 0),
+              unitPrice: parseFloat(item.price || 0),
+              total: parseFloat(item.total || 0)
+            }]
+          };
+        case 'stock': // المخزون
+          return {
+            id: item.id?.toString() || item.name,
+            name: item.name,
+            sku: item.sku || `SKU-${item.name}`,
+            stock: parseFloat(item.balance || 0), // تحويل balance إلى stock
+            price: parseFloat(item.price || 0),
+            category: item.category || 'عام'
+          };
+        case 'salesData': // المبيعات
+          return {
+            id: item.id?.toString() || `SAL-${Date.now()}`,
+            date: item.date || new Date().toISOString(),
+            customerId: item.customer || 'عميل نقدي', // تحويل customer إلى customerId
+            totalAmount: parseFloat(item.total || 0),
+            status: 'completed',
+            items: item.items || []
+          };
+        default:
+          return item;
+      }
+    });
+  };
+
+  // --- محرك الإرسال المطور مع تشخيص الأخطاء ---
+  const syncWithNawahDB = async (collectionName, rawData) => {
+    if (!rawData || (Array.isArray(rawData) && rawData.length === 0)) return;
+
+    try {
+      // 1. تحويل البيانات للمفاتيح التي يفهمها الأدمن
+      const formattedData = mapDataToNawahSchema(collectionName, rawData);
+      
+      // 2. توحيد أسماء الملفات مع الأدمن
+      const remoteNames = {
+        inventory: 'purchase_orders',
+        stock: 'products',
+        salesData: 'sales_orders',
+        productionData: 'manufacturing_orders',
+        expenses: 'ledger'
+      };
+      
+      const folderName = remoteNames[collectionName] || collectionName;
+      const fileName = `${folderName}.json`; 
+      const path = `database/${DB_CONFIG.tenant}/${folderName}/${fileName}`;
+      
+      const content = toBase64(JSON.stringify(formattedData, null, 2));
+      const url = `https://api.github.com/repos/${DB_CONFIG.owner}/${DB_CONFIG.repo}/contents/${path}`;
+      
+      let sha = null;
+      try {
+        const getRes = await CapacitorHttp.get({ 
+          url, 
+          headers: { 'Authorization': `token ${DB_CONFIG.token}` } 
+        });
+        if (getRes.status === 200) sha = getRes.data.sha;
+      } catch (e) { }
+
+      await CapacitorHttp.put({
+        url,
+        headers: {
+          'Authorization': `token ${DB_CONFIG.token}`,
+          'Content-Type': 'application/json'
+        },
+        data: {
+          message: `Sync ${folderName} from Maamoul App`,
+          content: content,
+          sha: sha
+        }
+      });
+      console.log(`✅ Synced ${folderName} to Nawah DB`);
+    } catch (error) {
+      console.error("❌ Nawah Sync Error:", error);
+    }
+  };
+
+  // --- States ---
+  const [stock, setStock] = useState(() => loadInitial('stock', []));
+  const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
+  const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
+  const [expenses, setExpenses] = useState(() => loadInitial('expenses', []));
+  const [waste, setWaste] = useState(() => loadInitial('waste', []));
+  const [suppliers, setSuppliers] = useState(() => loadInitial('suppliers', []));
+  const [customers, setCustomers] = useState(() => loadInitial('customers', []));
+  const [productionData, setProductionData] = useState(() => loadInitial('productionData', []));
+  const [supplierWaitingList, setSupplierWaitingList] = useState(() => loadInitial('waitingList', []));
+  const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
+  const [staff, setStaff] = useState(() => loadInitial('staff', []));
+
+  // تحديث المزامنة والـ LocalStorage
+  useEffect(() => {
+    const syncMap = { stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, waitingList: supplierWaitingList, cashBook, staff };
+    
+    // تأخير بسيط للمزامنة لضمان عدم الضغط على الشبكة
+    const timer = setTimeout(() => {
+      Object.entries(syncMap).forEach(([key, val]) => {
+        localStorage.setItem(key, JSON.stringify(val));
+        syncWithNawahDB(key, val);
+      });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff]);
+
+  // --- Financial Logic ---
+  const financialStats = useMemo(() => {
+    const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
+    const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+    const totalPurchasesCash = inventory.filter(p => p.paymentMethod === 'كاش').reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
+    const cashBalance = totalIncome - (totalExp + totalPurchasesCash);
+    return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash };
+  }, [salesData, expenses, inventory]);
+
+  const handleSavePurchase = (p) => {
+    setInventory(prev => [...prev, p]);
+    setStock(prev => {
+      const idx = prev.findIndex(s => s.name === p.item);
+      if (idx > -1) {
+        const up = [...prev];
+        up[idx] = { ...up[idx], balance: (up[idx].balance || 0) + parseFloat(p.quantity || 0) };
+        return up;
+      }
+      return [...prev, { id: Date.now(), name: p.item, balance: parseFloat(p.quantity), price: p.price }];
+    });
+    showSwal('تم التحديث والمزامنة');
+  };
+
+  const renderPage = () => {
+    const props = { onBack: () => setActivePage('dashboard'), stock, inventory, salesData };
+    switch (activePage) {
+      case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} />;
+      case 'inventory': return <Inventory {...props} categories={stock} onAddItem={handleSavePurchase} />;
+      case 'purchases': return <PurchasesManager {...props} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
+      case 'sales': return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
+      case 'production': return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
+      case 'reports': return <Reports {...props} />;
+      case 'expenses': return <Expenses {...props} onSave={(e) => setExpenses(prev => [...prev, e])} />;
+      default: return <Dashboard setActivePage={setActivePage} stats={financialStats} />;
+    }
+  };
 
   return (
-    <div className="dashboard-wrapper" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif', padding: '10px' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* تم تعديل عرض اللوجو ليكون مرناً مع الأخطاء */}
-          <img 
-            src={LogoImage} 
-            alt="Logo" 
-            onError={(e) => { e.target.src = "https://ui-avatars.com/api/?name=Zad+ الخير&background=e67e22&color=fff" }}
-            style={{ width: '45px', height: '45px', borderRadius: '12px', objectFit: 'cover' }} 
-          />
-          <div>
-            <h1 style={{ fontSize: '1.3rem', color: '#1e293b', margin: 0, fontWeight: '900' }}>زاد <span style={{ color: '#e67e22' }}>الخير</span></h1>
-            <p style={{ color: '#64748b', fontSize: '10px', margin: 0 }}>للصناعات الغذائية</p>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button onClick={analyzeWithAI} disabled={isAiLoading} style={aiButtonStyle}>
-            {isAiLoading ? <Loader2 size={14} className="animate-spin" /> : <BrainCircuit size={14} />} AI
+    <div className="app-container" style={{ direction: 'rtl' }}>
+      <main className="main-content">{renderPage()}</main>
+      <nav className="bottom-nav">
+        {[{id:'dashboard', label:'الرئيسية'}, {id:'inventory', label:'المخزن'}, {id:'purchases', label:'المشتريات'}, {id:'reports', label:'التقارير'}].map(item => (
+          <button key={item.id} className={`nav-item ${activePage === item.id ? 'active' : ''}`} onClick={() => setActivePage(item.id)}>
+            <span className="nav-label">{item.label}</span>
           </button>
-          <button onClick={generateTodayReport} style={reportButtonStyle}>
-            <BarChart3 size={14} /> التقرير
-          </button>
-        </div>
-      </header>
-
-      {/* الرسوم البيانية */}
-      <div style={cardStyle}>
-        <h3 style={cardTitleStyle}><TrendingUp size={18} color="#e67e22" /> منحنى الإنتاج الأخير</h3>
-        <div style={{ width: '100%', height: 180 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="colorQty" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#e67e22" stopOpacity={0.2}/><stop offset="95%" stopColor="#e67e22" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} style={{fontSize: '10px'}} />
-              <YAxis hide />
-              <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-              <Area type="monotone" dataKey="كمية" stroke="#e67e22" strokeWidth={3} fill="url(#colorQty)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* الأقسام الرئيسية */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '25px' }}>
-        {sections.map((sec) => (
-          <div key={sec.id} onClick={() => setActivePage(sec.id)} style={{ ...menuItemStyle, borderRight: `6px solid ${sec.color}` }}>
-            <div style={{ color: sec.color, marginBottom: '10px' }}>{sec.icon}</div>
-            <div>
-              <div style={{ fontWeight: 'bold', fontSize: '15px', color: '#1e293b' }}>{sec.title}</div>
-              <div style={{ fontSize: '10px', color: '#94a3b8' }}>{sec.id === 'inventory' ? `${stock.length} صنف مسجل` : sec.desc}</div>
-            </div>
-          </div>
         ))}
-      </div>
-
-      {/* جدول العمليات الأخير */}
-      <div style={cardStyle}>
-        <h3 style={cardTitleStyle}><Calendar size={18} color="#3498db" /> تفاصيل آخر عمليات الإنتاج</h3>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', minWidth: '400px' }}>
-            <thead>
-              <tr style={{ color: '#94a3b8', fontSize: '11px', borderBottom: '1px solid #f1f5f9' }}>
-                <th style={{ padding: '10px 5px' }}>التاريخ</th>
-                <th style={{ padding: '10px 5px' }}>المنتج</th>
-                <th style={{ padding: '10px 5px' }}>الكمية</th>
-                <th style={{ padding: '10px 5px' }}>حذف</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productionHistory.length > 0 ? productionHistory.slice(-5).reverse().map((log, idx) => {
-                const logId = log._id || log.id;
-                return (
-                  <tr key={logId || idx} style={{ fontSize: '12px', borderBottom: '1px solid #f8fafc' }}>
-                    <td style={{ padding: '10px 5px', color: '#64748b' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span>{log.date}</span>
-                        <span style={{ fontSize: '10px', color: '#94a3b8' }}><Clock size={10} /> {log.shift || 'الوردية'}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 5px', fontWeight: 'bold' }}>{log.products?.[0]?.name || 'معمول'}</td>
-                    <td style={{ padding: '10px 5px' }}>{log.products?.[0]?.quantity || 0} وحدة</td>
-                    <td style={{ padding: '10px 5px' }}>
-                      <button onClick={() => handleDeleteProduction(logId)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                        <Trash2 size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }) : (
-                <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>لا توجد سجلات إنتاج حالياً</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </nav>
     </div>
   );
 };
 
-// الأنماط (Styles) - لم يتم حذف أي منها لضمان الشكل الجمالي
-const cardStyle = { backgroundColor: '#fff', borderRadius: '24px', padding: '20px', marginBottom: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.02)' };
-const cardTitleStyle = { fontSize: '15px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b', fontWeight: 'bold' };
-const menuItemStyle = { backgroundColor: '#fff', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', cursor: 'pointer', transition: 'all 0.3s ease' };
-const aiButtonStyle = { background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold', fontSize: '12px' };
-const reportButtonStyle = { background: '#1e293b', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500', fontSize: '12px' };
-
-export default Dashboard;
+export default App;
