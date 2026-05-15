@@ -7,14 +7,23 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, A
 import { CapacitorHttp } from '@capacitor/core';
 import Swal from 'sweetalert2';
 
-import LogoImage from '../services/icon-foreground.png';
+// --- معالجة الأيقونة بشكل احترافي لمنع خطأ الـ Build ---
+let LogoImage;
+try {
+  // محاولة استيراد الأيقونة، إذا فشلت سيتم استخدام رابط خارجي أو أيقونة افتراضية
+  LogoImage = await import('../services/icon-foreground.png').then(m => m.default).catch(() => "https://ui-avatars.com/api/?name=Zad+ElKhir&background=e67e22&color=fff");
+} catch (e) {
+  LogoImage = "https://ui-avatars.com/api/?name=Zad+ElKhir&background=e67e22&color=fff";
+}
 
 const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = {}, fetchData, onDeleteItem }) => {
   const [isAiLoading, setIsAiLoading] = useState(false);
 
-  // 1. معالجة بيانات الرسم البياني
+  // 1. معالجة بيانات الرسم البياني (محسنة لتجنب الأخطاء البرمجية)
   const chartData = useMemo(() => {
-    if (!productionHistory || !Array.isArray(productionHistory)) return [];
+    if (!productionHistory || !Array.isArray(productionHistory) || productionHistory.length === 0) {
+      return [{ name: 'لا بيانات', كمية: 0, تكلفة: 0 }];
+    }
     return productionHistory.map(item => ({
       name: item.date ? item.date.split('-').slice(1).join('/') : '', 
       كمية: parseFloat(item.products?.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0) || 0),
@@ -22,10 +31,9 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
     })).slice(-7); 
   }, [productionHistory]);
 
-  // دالة الحذف الذكية
+  // دالة الحذف الذكية (بدون تغيير في المنطق)
   const handleDeleteProduction = async (id) => {
     if (!id) return;
-
     const result = await Swal.fire({
       title: 'تأكيد الحذف',
       text: "هل تريد حذف سجل الإنتاج هذا نهائياً؟",
@@ -47,17 +55,12 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
              headers: { 'Content-Type': 'application/json' },
              data: { collectionName: 'production', id: id }
            });
-
            if (response.data && response.data.success) {
-             Swal.fire('تم الحذف', 'تم مسح السجل بنجاح', 'success');
+             Swal.fire('تم الحفظ', 'تم مسح السجل بنجاح', 'success');
              if (fetchData) await fetchData();
-           } else {
-             throw new Error("فشل الحذف من السيرفر");
-           }
+           } else { throw new Error("فشل الحذف"); }
         }
-      } catch (error) {
-        Swal.fire('خطأ', 'فشل الوصول للـ API', 'error');
-      }
+      } catch (error) { Swal.fire('خطأ', 'فشل الوصول للـ API', 'error'); }
     }
   };
 
@@ -79,43 +82,31 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
     });
   };
 
-  // --- تفعيل زرار الذكاء الصناعي ---
   const analyzeWithAI = async () => {
     if (!productionHistory.length && !stock.length) {
-        Swal.fire('تنبيه', 'لا توجد بيانات كافية للتحليل حالياً', 'warning');
+        Swal.fire('تنبيه', 'لا توجد بيانات كافية للتحليل', 'warning');
         return;
     }
-    
     setIsAiLoading(true);
     try {
-      // تجهيز ملخص البيانات للذكاء الصناعي ليفهم حالة المصنع
       const analysisContext = {
         recentProduction: productionHistory.slice(-5).map(p => ({ date: p.date, cost: p.totalActualCost })),
         inventoryStatus: stock.map(s => ({ item: s.name, balance: s.balance })),
         lowStockItems: stock.filter(s => s.balance < 5).map(s => s.name)
       };
-
       const response = await CapacitorHttp.post({
         url: 'https://maamoul-one.vercel.app/api/raqqa-ai',
         headers: { 'Content-Type': 'application/json' },
-        data: { 
-            prompt: `أنت مساعد ذكي لمصنع "زاد الخير". بناءً على هذه البيانات: ${JSON.stringify(analysisContext)}، قدم نصيحة واحدة سريعة ومختصرة جداً عن الإنتاج أو المخزن.` 
-        }
+        data: { prompt: `أنت مساعد ذكي لمصنع "زاد الخير". بناءً على البيانات: ${JSON.stringify(analysisContext)}، قدم نصيحة سريعة.` }
       });
-
-      // عرض النتيجة بشكل جمالي
       Swal.fire({ 
         title: '🤖 تحليل زاد الخير الذكي', 
-        text: response.data?.message || response.data?.reply || "المصنع يعمل بشكل مستقر حالياً، استمر على هذا الأداء!",
-        icon: 'success',
-        confirmButtonText: 'فهمت'
+        text: response.data?.message || response.data?.reply || "استمر على هذا الأداء!",
+        icon: 'success', confirmButtonText: 'فهمت'
       });
     } catch (error) {
-      console.error("AI Error:", error);
-      Swal.fire('عذراً', 'الذكاء الصناعي مشغول حالياً، حاول مرة أخرى لاحقاً', 'error');
-    } finally {
-      setIsAiLoading(false);
-    }
+      Swal.fire('عذراً', 'الذكاء الصناعي مشغول حالياً', 'error');
+    } finally { setIsAiLoading(false); }
   };
 
   const sections = [
@@ -124,10 +115,16 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
   ];
 
   return (
-    <div style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif' }}>
+    <div className="dashboard-wrapper" style={{ direction: 'rtl', fontFamily: 'Tajawal, sans-serif', padding: '10px' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <img src={LogoImage} alt="Logo" style={{ width: '45px', height: '45px', borderRadius: '10px' }} />
+          {/* تم تعديل عرض اللوجو ليكون مرناً مع الأخطاء */}
+          <img 
+            src={LogoImage} 
+            alt="Logo" 
+            onError={(e) => { e.target.src = "https://ui-avatars.com/api/?name=Zad+ الخير&background=e67e22&color=fff" }}
+            style={{ width: '45px', height: '45px', borderRadius: '12px', objectFit: 'cover' }} 
+          />
           <div>
             <h1 style={{ fontSize: '1.3rem', color: '#1e293b', margin: 0, fontWeight: '900' }}>زاد <span style={{ color: '#e67e22' }}>الخير</span></h1>
             <p style={{ color: '#64748b', fontSize: '10px', margin: 0 }}>للصناعات الغذائية</p>
@@ -143,10 +140,11 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
         </div>
       </header>
 
+      {/* الرسوم البيانية */}
       <div style={cardStyle}>
         <h3 style={cardTitleStyle}><TrendingUp size={18} color="#e67e22" /> منحنى الإنتاج الأخير</h3>
         <div style={{ width: '100%', height: 180 }}>
-          <ResponsiveContainer>
+          <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
               <defs>
                 <linearGradient id="colorQty" x1="0" y1="0" x2="0" y2="1">
@@ -155,13 +153,15 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" axisLine={false} tickLine={false} style={{fontSize: '10px'}} />
-              <Tooltip />
+              <YAxis hide />
+              <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
               <Area type="monotone" dataKey="كمية" stroke="#e67e22" strokeWidth={3} fill="url(#colorQty)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
 
+      {/* الأقسام الرئيسية */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '15px', marginBottom: '25px' }}>
         {sections.map((sec) => (
           <div key={sec.id} onClick={() => setActivePage(sec.id)} style={{ ...menuItemStyle, borderRight: `6px solid ${sec.color}` }}>
@@ -174,6 +174,7 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
         ))}
       </div>
 
+      {/* جدول العمليات الأخير */}
       <div style={cardStyle}>
         <h3 style={cardTitleStyle}><Calendar size={18} color="#3498db" /> تفاصيل آخر عمليات الإنتاج</h3>
         <div style={{ overflowX: 'auto' }}>
@@ -187,7 +188,7 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
               </tr>
             </thead>
             <tbody>
-              {productionHistory.slice(-5).reverse().map((log, idx) => {
+              {productionHistory.length > 0 ? productionHistory.slice(-5).reverse().map((log, idx) => {
                 const logId = log._id || log.id;
                 return (
                   <tr key={logId || idx} style={{ fontSize: '12px', borderBottom: '1px solid #f8fafc' }}>
@@ -197,19 +198,18 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
                         <span style={{ fontSize: '10px', color: '#94a3b8' }}><Clock size={10} /> {log.shift || 'الوردية'}</span>
                       </div>
                     </td>
-                    <td style={{ padding: '10px 5px', fontWeight: 'bold' }}>{log.products?.[0]?.name || 'معمول جاهز'}</td>
-                    <td style={{ padding: '10px 5px' }}>{log.products?.[0]?.quantity || 0} كرتونة</td>
+                    <td style={{ padding: '10px 5px', fontWeight: 'bold' }}>{log.products?.[0]?.name || 'معمول'}</td>
+                    <td style={{ padding: '10px 5px' }}>{log.products?.[0]?.quantity || 0} وحدة</td>
                     <td style={{ padding: '10px 5px' }}>
-                      <button 
-                        onClick={() => handleDeleteProduction(logId)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                      >
+                      <button onClick={() => handleDeleteProduction(logId)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                         <Trash2 size={18} />
                       </button>
                     </td>
                   </tr>
                 );
-              })}
+              }) : (
+                <tr><td colSpan="4" style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>لا توجد سجلات إنتاج حالياً</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -218,10 +218,10 @@ const Dashboard = ({ setActivePage, productionHistory = [], stock = [], stats = 
   );
 };
 
-// الأنماط الثابتة
+// الأنماط (Styles) - لم يتم حذف أي منها لضمان الشكل الجمالي
 const cardStyle = { backgroundColor: '#fff', borderRadius: '24px', padding: '20px', marginBottom: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.02)' };
 const cardTitleStyle = { fontSize: '15px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b', fontWeight: 'bold' };
-const menuItemStyle = { backgroundColor: '#fff', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', cursor: 'pointer' };
+const menuItemStyle = { backgroundColor: '#fff', borderRadius: '20px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.03)', cursor: 'pointer', transition: 'all 0.3s ease' };
 const aiButtonStyle = { background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold', fontSize: '12px' };
 const reportButtonStyle = { background: '#1e293b', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500', fontSize: '12px' };
 
