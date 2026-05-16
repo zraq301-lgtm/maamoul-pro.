@@ -142,6 +142,62 @@ const App = () => {
   useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
   useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
 
+  // --- منطق جلب البيانات الحي وتوزيعها تلقائياً على الصفحات ---
+  useEffect(() => {
+    const fetchAndDistributeLiveJSON = async () => {
+      try {
+        setSyncStatus('جاري فحص البيانات الحية...');
+        const remoteNames = { stock: 'products', salesData: 'sales_orders', inventory: 'purchase_orders', productionData: 'manufacturing_orders', expenses: 'ledger' };
+        
+        // استدعاء الأقسام الأساسية المتواجدة على السحابة حالياً لتحديث الواجهات بها
+        const targetKeys = ['stock', 'salesData', 'inventory', 'productionData', 'expenses'];
+        let updatedCount = 0;
+
+        for (const key of targetKeys) {
+          const folderName = remoteNames[key];
+          const path = `database/${DB_CONFIG.tenant}/${folderName}/${folderName}.json`;
+          const rawUrl = `https://raw.githubusercontent.com/${DB_CONFIG.owner}/${DB_CONFIG.repo}/main/${path}?t=${new Date().getTime()}`;
+
+          const response = await CapacitorHttp.get({ url: rawUrl });
+          
+          if (response.status === 200 && response.data) {
+            let data = response.data;
+            if (typeof data === 'string') data = JSON.parse(data);
+            const records = Array.isArray(data) ? data : (data.records || []);
+
+            if (records.length > 0) {
+              // توزيع البيانات المسترجعة بشكل ديناميكي ومباشر على الـ States المقابلة لها
+              if (key === 'stock') setStock(records);
+              if (key === 'salesData') setSalesData(records);
+              if (key === 'inventory') setInventory(records);
+              if (key === 'productionData') setProductionData(records);
+              if (key === 'expenses') setExpenses(records);
+              updatedCount++;
+            }
+          }
+        }
+
+        if (updatedCount > 0) {
+          setSyncStatus('✅ تم جلب البيانات الحية وتحديث الصفحات');
+        } else {
+          setSyncStatus('مستقر');
+        }
+      } catch (err) {
+        console.error("❌ Live Fetch Error", err);
+        setSyncStatus('⚠️ خطأ في قراءة البيانات الحية');
+      }
+    };
+
+    // تشغيل جلب البيانات بعد ثانيتين من فتح التطبيق، وتكرار العملية كل دقيقتين للمزامنة الخلفية الحية
+    const initialFetchTimer = setTimeout(fetchAndDistributeLiveJSON, 2000);
+    const liveFetchInterval = setInterval(fetchAndDistributeLiveJSON, 120000);
+
+    return () => {
+      clearTimeout(initialFetchTimer);
+      clearInterval(liveFetchInterval);
+    };
+  }, []);
+
   // 2. محرك المزامنة المطور لكشف الأخطاء وتنبيهك فوراً بالنجاح
   useEffect(() => {
     const runBackgroundSync = async () => {
