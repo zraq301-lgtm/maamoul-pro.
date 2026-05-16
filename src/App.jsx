@@ -88,7 +88,7 @@ const App = () => {
   };
 
   const syncWithNawahDB = async (collectionName, rawData) => {
-    if (!rawData || rawData.length === 0) return;
+    if (!rawData || rawData.length === 0) return false;
     try {
       const formattedData = mapDataToNawahSchema(collectionName, rawData);
       const remoteNames = { inventory: 'purchase_orders', stock: 'products', salesData: 'sales_orders', productionData: 'manufacturing_orders', expenses: 'ledger' };
@@ -102,13 +102,16 @@ const App = () => {
         if (getRes.status === 200) sha = getRes.data.sha;
       } catch (e) {}
 
-      await CapacitorHttp.put({
+      const putRes = await CapacitorHttp.put({
         url,
         headers: { 'Authorization': `token ${DB_CONFIG.token}`, 'Content-Type': 'application/json' },
         data: { message: `Automated Background Sync`, content: toBase64(JSON.stringify(formattedData, null, 2)), sha: sha }
       });
+
+      return putRes.status === 200 || putRes.status === 201;
     } catch (error) {
       console.error("❌ Sync Error", error);
+      return false;
     }
   };
 
@@ -125,7 +128,7 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // 1. مزامنة البيانات محلياً (منفصلة ومستقرة تماماً وبلا أي ثقل)
+  // 1. مزامنة البيانات محلياً
   useEffect(() => { localStorage.setItem('stock', JSON.stringify(stock)); }, [stock]);
   useEffect(() => { localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData]);
   useEffect(() => { localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory]);
@@ -138,13 +141,13 @@ const App = () => {
   useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
   useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
 
-  // 2. [إغلاق الثغرة الحاسم]: مصفوفة مراقبة فارغة لمنع الـ Loops اللانهائية نهائياً
+  // 2. محرك المزامنة المطور لكشف الأخطاء وتنبيهك فوراً بالنجاح
   useEffect(() => {
     const runBackgroundSync = async () => {
       try {
-        setSyncStatus('جاري المزامنة السحابية...');
+        let hasDataToSync = false;
+        let successCount = 0;
         
-        // جلب أحدث البيانات مباشرة من الـ LocalStorage لضمان عدم الاعتماد على الـ State المتقلب أثناء الـ Loop
         const syncKeys = ['stock', 'salesData', 'inventory', 'expenses', 'waste', 'suppliers', 'customers', 'productionData', 'waitingList', 'cashBook', 'staff'];
         
         for (const key of syncKeys) {
@@ -152,28 +155,37 @@ const App = () => {
           if (localData) {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              // تعديل مسمى المفتاح الخارجي ليتوافق مع قاعدة بيانات نواة
+              hasDataToSync = true;
+              setSyncStatus(`جاري رفع ${key}...`);
               const collectionName = key === 'waitingList' ? 'supplierWaitingList' : key;
-              await syncWithNawahDB(collectionName, parsed);
+              const isSuccess = await syncWithNawahDB(collectionName, parsed);
+              if (isSuccess) successCount++;
             }
           }
         }
-        setSyncStatus('✅ سحابة مستقرة');
+
+        if (!hasDataToSync) {
+          setSyncStatus('✅ لا توجد بيانات جديدة للرفع');
+        } else if (successCount > 0) {
+          setSyncStatus('✅ تم الرفع السحابي بنجاح');
+          showSwal('تم تحديث السحابة وإنشاء الملفات!', 'success');
+        } else {
+          setSyncStatus('⚠️ فشل الرفع (تحقق من التوكن)');
+        }
       } catch (err) {
-        setSyncStatus('⚠️ خطأ اتصال');
+        setSyncStatus('⚠️ خطأ في المزامنة');
       }
     };
 
-    // وقت انتظار آمن (10 ثوانٍ) لمنع أي تداخل أثناء فتح التطبيق
-    const initialTimer = setTimeout(runBackgroundSync, 10000);
-    // تكرار دوري مريح كل 60 ثانية لتوفير المعالج والبطارية
+    // تقليص مهلة التشغيل الأولى لـ 4 ثوانٍ فقط لتراها سريعاً بعد إدخال البيانات
+    const initialTimer = setTimeout(runBackgroundSync, 4000);
     const interval = setInterval(runBackgroundSync, 60000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, []); // 🌟 الحماية هنا: مصفوفة فارغة تعني التشغيل مرة واحدة فقط وجدولة الخلفية بأمان!
+  }, [stock, salesData, inventory]); // نراقب الأساسيات هنا لتحفيز الرفع الفوري عند الإضافة
 
   // --- Financial Logic ---
   const financialStats = useMemo(() => {
@@ -195,7 +207,6 @@ const App = () => {
       }
       return [...prev, { id: Date.now(), name: p.item, balance: parseFloat(p.quantity), price: p.price }];
     });
-    showSwal('تم حفظ الفاتورة محلياً وسيتم مزامنتها خلفياً');
   };
 
   const renderPage = () => {
