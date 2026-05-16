@@ -28,6 +28,9 @@ jobs:
           java-version: '17'
           
       - name: 4. Build Web Project
+        env:
+          # 🌟 سحب التوكن من أسرار المستودع وحقنه داخل الـ Vite ليعمل أوتوماتيكياً في الـ APK
+          VITE_GITHUB_TOKEN: ${{ secrets.VITE_GITHUB_TOKEN }}
         run: |
           npm install --legacy-peer-deps
           npm run build
