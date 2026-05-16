@@ -23,7 +23,8 @@ import './App.css';
 const DB_CONFIG = {
   owner: 'zraq301-lgtm',
   repo: 'Nawah-AI-db',
-  token: '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', 
+  // 🔒 حذف التوكن القديم الميت واعتماد الحقن التلقائي الذكي من السيرفر
+  token: import.meta.env.VITE_GITHUB_TOKEN, 
   tenant: 'nawah-core'
 };
 
