@@ -1,12 +1,13 @@
 import { CapacitorHttp } from '@capacitor/core';
 
 /**
- * 📤 دالة موحدة لرفع وحفظ البيانات السحابية (محرك المزامنة الخلفية)
+ * 📤 المحرك المطور لإرسال وحفظ البيانات برابطه المستقل المباشر
  */
 export const saveToNawahDB = async (moduleName, recordId, payload) => {
   try {
     const options = {
-      url: 'https://nawah-ai-db.vercel.app/api/engine',
+      url: 'https://nawah-ai-db.vercel.app/api/save-engine-data', // 🎯 رابط محرك الرفع المستقل
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       data: {
         module_name: moduleName,
@@ -16,37 +17,42 @@ export const saveToNawahDB = async (moduleName, recordId, payload) => {
     };
 
     const response = await CapacitorHttp.post(options);
-
-    if (response.status === 200 || response.status === 201) {
+    if (response.status === 200 && response.data) {
       return { success: true, data: response.data };
     }
     return { success: false, error: response.data };
   } catch (error) {
-    console.error(`🚨 خطأ في رفع الموديول ${moduleName}:`, error);
+    console.error(`🚨 خطأ في محرك إرسال الموديول ${moduleName}:`, error);
     return { success: false, error: error.message };
   }
 };
 
 /**
- * 📥 دالة مستقلة ومنفصلة لجلب واستعادة البيانات السحابية لموديول معين
+ * 📥 المحرك المطور لجلب واستعادة البيانات برابطه المستقل المباشر
  */
 export const loadFromNawahDB = async (moduleName, recordId) => {
   try {
     const options = {
-      url: `https://nawah-ai-db.vercel.app/api/engine?module_name=${moduleName}&record_id=${recordId}`,
-      headers: { 'Cache-Control': 'no-cache' }
+      url: 'https://nawah-ai-db.vercel.app/api/get-engine-data', // 🎯 رابط محرك السحب المستقل
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: {
+        module_name: moduleName,
+        record_id: recordId
+      }
     };
 
-    const response = await CapacitorHttp.get(options);
-
+    const response = await CapacitorHttp.post(options);
     if (response.status === 200 && response.data) {
-      if (Array.isArray(response.data)) {
-        return response.data;
+      let cloudData = response.data;
+      if (cloudData && !Array.isArray(cloudData) && typeof cloudData === 'object') {
+        cloudData = cloudData.payload || cloudData.records || cloudData.data || cloudData;
       }
+      if (Array.isArray(cloudData)) return cloudData;
     }
     return [];
   } catch (error) {
-    console.error(`🚨 خطأ في جلب الموديول ${moduleName}:`, error);
+    console.error(`🚨 خطأ في محرك جلب الموديول ${moduleName}:`, error);
     return [];
   }
 };
