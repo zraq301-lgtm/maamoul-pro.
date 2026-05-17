@@ -28,6 +28,8 @@ const showSwal = (title, icon = 'success') => {
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
   const [syncStatus, setSyncStatus] = useState('مستقر');
+  // 💡 متغير حماية لمنع مسح التخزين أثناء جلب البيانات من السحابة
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const loadInitial = (key, initialValue) => {
     try {
@@ -49,26 +51,25 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // 1. مزامنة البيانات وتحديث الحفظ المحلي (LocalStorage) فوراً عند التغيير
-  useEffect(() => { localStorage.setItem('stock', JSON.stringify(stock)); }, [stock]);
-  useEffect(() => { localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData]);
-  useEffect(() => { localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory]);
-  useEffect(() => { localStorage.setItem('expenses', JSON.stringify(expenses)); }, [expenses]);
-  useEffect(() => { localStorage.setItem('waste', JSON.stringify(waste)); }, [waste]);
-  useEffect(() => { localStorage.setItem('suppliers', JSON.stringify(suppliers)); }, [suppliers]);
-  useEffect(() => { localStorage.setItem('customers', JSON.stringify(customers)); }, [customers]);
-  useEffect(() => { localStorage.setItem('productionData', JSON.stringify(productionData)); }, [productionData]);
-  useEffect(() => { localStorage.setItem('waitingList', JSON.stringify(supplierWaitingList)); }, [supplierWaitingList]);
-  useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
-  useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
+  // 1. مزامنة البيانات وتحديث الحفظ المحلي (LocalStorage) - مع إضافة حماية مرحلة الإقلاع
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('stock', JSON.stringify(stock)); }, [stock, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('expenses', JSON.stringify(expenses)); }, [expenses, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('waste', JSON.stringify(waste)); }, [waste, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('suppliers', JSON.stringify(suppliers)); }, [suppliers, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('customers', JSON.stringify(customers)); }, [customers, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('productionData', JSON.stringify(productionData)); }, [productionData, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('waitingList', JSON.stringify(supplierWaitingList)); }, [supplierWaitingList, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook, isInitialLoading]);
+  useEffect(() => { if (!isInitialLoading) localStorage.setItem('staff', JSON.stringify(staff)); }, [staff, isInitialLoading]);
 
-  // 2. 📥 محرك جلب واستعادة البيانات العكسي السحابي التلقائي (عند إقلاع التطبيق لأول مرة)
+  // 2. 📥 محرك جلب واستعادة البيانات العكسي السحابي التلقائي الشامل
   useEffect(() => {
     const downloadDataFromNawahCloud = async () => {
       try {
         setSyncStatus('🔄 جاري فحص واستيراد بياناتك السحابية الآمنة...');
         
-        // خريطة الربط بين الـ States والموديولات المعرفة بالسيرفر
         const syncMap = [
           { key: 'stock', module: 'inventory', setter: setStock },
           { key: 'salesData', module: 'sales', setter: setSalesData },
@@ -80,7 +81,6 @@ const App = () => {
         let importedCount = 0;
 
         for (const item of syncMap) {
-          // إرسال طلب GET للسيرفر مع تمرير اسم الموديول واسم الملف المطلوب
           const response = await fetch(`https://nawah-ai-db.vercel.app/api/engine?module_name=${item.module}&record_id=${item.key}_records`, {
             method: 'GET',
             headers: { 'Cache-Control': 'no-cache' }
@@ -88,13 +88,17 @@ const App = () => {
 
           if (response.ok) {
             const cloudRecords = await response.json();
+            // التأكد من أن القادم مصفوفة تحتوي على بيانات فعلية وليس مصفوفة فارغة
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
-              item.setter(cloudRecords); // تعبئة الـ State بالبيانات المسترجعة من السحابة فوراً
-              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); // تأمين التخزين المحلي
+              item.setter(cloudRecords); 
+              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
               importedCount++;
             }
           }
         }
+
+        // إنهاء مرحلة الإقلاع بنجاح والسماح بالتحديث الدوري للـ localStorage
+        setIsInitialLoading(false);
 
         if (importedCount > 0) {
           setSyncStatus('✅ تم استعادة كافة البيانات من nawah.ai بنجاح');
@@ -104,16 +108,19 @@ const App = () => {
         }
       } catch (err) {
         console.error("🚨 Cloud Download Error:", err);
+        setIsInitialLoading(false);
         setSyncStatus('⚠️ فشل سحب النسخة الاحتياطية السحابية');
       }
     };
 
-    // تشغيل عملية استيراد وبناء قاعدة البيانات مرة واحدة عند فتح التطبيق
     downloadDataFromNawahCloud();
   }, []);
 
   // 3. 📤 محرك المزامنة الخلفية المطور المسؤول عن رفع البيانات وتحديث السحابة دورياً
   useEffect(() => {
+    // نمنع المزامنة والرفع التلقائي قبل اكتمال عملية السحب الأولى بالكامل
+    if (isInitialLoading) return;
+
     const runBackgroundSyncToNawah = async () => {
       try {
         let hasDataToSync = false;
@@ -135,7 +142,6 @@ const App = () => {
               hasDataToSync = true;
               setSyncStatus(`جاري تحديث السحابة لموديول ${item.key}...`);
               
-              // رفع المصفوفة المتكاملة لتخزينها دورياً بنظام الأرشفة
               const res = await saveToNawahDB(item.module, `${item.key}_records`, parsed);
               if (res.success) successCount++;
             }
@@ -154,15 +160,15 @@ const App = () => {
       }
     };
 
-    // المزامنة الخلفية الأولى تبدأ بعد 10 ثوانٍ من الإقلاع (لإعطاء أولوية للسحب التلقائي أولاً)، وتتكرر كل دقيقتين
-    const initialTimer = setTimeout(runBackgroundSyncToNawah, 10000);
+    // تبدأ المزامنة بعد 15 ثانية وتتكرر كل دقيقتين بشكل آمن ومستقر
+    const initialTimer = setTimeout(runBackgroundSyncToNawah, 15000);
     const interval = setInterval(runBackgroundSyncToNawah, 120000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [stock, salesData, inventory, productionData, expenses]);
+  }, [stock, salesData, inventory, productionData, expenses, isInitialLoading]);
 
   // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة ---
   const financialStats = useMemo(() => {
