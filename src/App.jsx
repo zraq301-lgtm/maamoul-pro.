@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 
+// استيراد أداة الاتصال الأصلية للهواتف الذكية من كاباسيتور
+import { CapacitorHttp } from '@capacitor/core';
+
 // استيراد دالة الاتصال الموحدة والمؤمنة بمحرك v2
 import { saveToNawahDB } from './services/db';
 
@@ -28,7 +31,7 @@ const showSwal = (title, icon = 'success') => {
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
   const [syncStatus, setSyncStatus] = useState('مستقر');
-  // 💡 متغير حماية لمنع مسح التخزين أثناء جلب البيانات من السحابة
+  // 💡 متغير حماية لمنع مسح أو تصفير التخزين أثناء جلب البيانات من السحابة عند الإقلاع
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const loadInitial = (key, initialValue) => {
@@ -64,11 +67,11 @@ const App = () => {
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook, isInitialLoading]);
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('staff', JSON.stringify(staff)); }, [staff, isInitialLoading]);
 
-  // 2. 📥 محرك جلب واستعادة البيانات العكسي السحابي التلقائي الشامل
+  // 2. 📥 محرك جلب واستعادة البيانات العكسي السحابي التلقائي الشامل المعتمد على CapacitorHttp
   useEffect(() => {
     const downloadDataFromNawahCloud = async () => {
       try {
-        setSyncStatus('🔄 جاري فحص واستيراد بياناتك السحابية الآمنة...');
+        setSyncStatus('🔄 جاري استيراد بياناتك السحابية عبر نظام الهاتف...');
         
         const syncMap = [
           { key: 'stock', module: 'inventory', setter: setStock },
@@ -81,14 +84,18 @@ const App = () => {
         let importedCount = 0;
 
         for (const item of syncMap) {
-          const response = await fetch(`https://nawah-ai-db.vercel.app/api/engine?module_name=${item.module}&record_id=${item.key}_records`, {
-            method: 'GET',
+          // استخدام الاتصال عبر الـ Native HTTP لتخطي مشاكل الـ CORS بالكامل 🚀
+          const options = {
+            url: `https://nawah-ai-db.vercel.app/api/engine?module_name=${item.module}&record_id=${item.key}_records`,
             headers: { 'Cache-Control': 'no-cache' }
-          });
+          };
 
-          if (response.ok) {
-            const cloudRecords = await response.json();
-            // التأكد من أن القادم مصفوفة تحتوي على بيانات فعلية وليس مصفوفة فارغة
+          const response = await CapacitorHttp.get(options);
+
+          // في كاباسيتور ريسبرنس ترجع النتيجة داخل السيرفر في حقل data مباشرة وبصيغة مفكوكة تلقائياً
+          if (response.status === 200 && response.data) {
+            const cloudRecords = response.data;
+            
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
               item.setter(cloudRecords); 
               localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
@@ -97,19 +104,19 @@ const App = () => {
           }
         }
 
-        // إنهاء مرحلة الإقلاع بنجاح والسماح بالتحديث الدوري للـ localStorage
+        // إنهاء مرحلة الإقلاع بنجاح وبدء تفعيل خطوط المراقبة والرفع الحية للمبيعات والمخازن
         setIsInitialLoading(false);
 
         if (importedCount > 0) {
           setSyncStatus('✅ تم استعادة كافة البيانات من nawah.ai بنجاح');
-          showSwal('تمت استعادة بياناتك السحابية المشفرة!', 'success');
+          showSwal('تمت استعادة بياناتك السحابية بنجاح!', 'success');
         } else {
           setSyncStatus('✅ قاعدة بيانات جديدة ونظيفة ومستقرة');
         }
       } catch (err) {
-        console.error("🚨 Cloud Download Error:", err);
+        console.error("🚨 Capacitor Http Download Error:", err);
         setIsInitialLoading(false);
-        setSyncStatus('⚠️ فشل سحب النسخة الاحتياطية السحابية');
+        setSyncStatus('⚠️ فشل سحب النسخة الاحتياطية عبر محرك الهاتف');
       }
     };
 
@@ -118,7 +125,6 @@ const App = () => {
 
   // 3. 📤 محرك المزامنة الخلفية المطور المسؤول عن رفع البيانات وتحديث السحابة دورياً
   useEffect(() => {
-    // نمنع المزامنة والرفع التلقائي قبل اكتمال عملية السحب الأولى بالكامل
     if (isInitialLoading) return;
 
     const runBackgroundSyncToNawah = async () => {
@@ -160,7 +166,6 @@ const App = () => {
       }
     };
 
-    // تبدأ المزامنة بعد 15 ثانية وتتكرر كل دقيقتين بشكل آمن ومستقر
     const initialTimer = setTimeout(runBackgroundSyncToNawah, 15000);
     const interval = setInterval(runBackgroundSyncToNawah, 120000);
 
