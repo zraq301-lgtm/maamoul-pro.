@@ -31,7 +31,7 @@ const showSwal = (title, icon = 'success') => {
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
   const [syncStatus, setSyncStatus] = useState('مستقر');
-  // 💡 متغير حماية لمنع مسح أو تصفير التخزين أثناء جلب البيانات من السحابة عند الإقلاع
+  // 💡 متغير حماية لمنع تصفير أو الكتابة فوق البيانات المحلية أثناء جلب البيانات من السحابة عند الإقلاع
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const loadInitial = (key, initialValue) => {
@@ -41,7 +41,7 @@ const App = () => {
     } catch (e) { return initialValue; }
   };
 
-  // --- States لإدارة البيانات محلياً في الواجهة ---
+  // --- States لإدارة البيانات محلياً في الواجهة لمشروع Maamoul ---
   const [stock, setStock] = useState(() => loadInitial('stock', []));
   const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
   const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
@@ -54,7 +54,7 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // 1. مزامنة البيانات وتحديث الحفظ المحلي (LocalStorage) - مع إضافة حماية مرحلة الإقلاع
+  // 1. مزامنة البيانات وتحديث الحفظ المحلي (LocalStorage) - مع حماية مرحلة الإقلاع والسحب
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('stock', JSON.stringify(stock)); }, [stock, isInitialLoading]);
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData, isInitialLoading]);
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory, isInitialLoading]);
@@ -67,12 +67,13 @@ const App = () => {
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook, isInitialLoading]);
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('staff', JSON.stringify(staff)); }, [staff, isInitialLoading]);
 
-  // 2. 📥 محرك جلب واستعادة البيانات العكسي السحابي التلقائي الشامل المعتمد على CapacitorHttp
+  // 2. 📥 محرك الجلب والتوزيع الذكي والدقيق للبيانات السحابية العائدة من nawah.ai
   useEffect(() => {
     const downloadDataFromNawahCloud = async () => {
       try {
-        setSyncStatus('🔄 جاري استيراد بياناتك السحابية عبر نظام الهاتف...');
+        setSyncStatus('🔄 جاري فحص واستيراد البيانات السحابية وضخها بالواجهة...');
         
+        // خريطة الربط الشاملة لضمان توجيه كل موديول إلى الـ State والملف الصحيح له
         const syncMap = [
           { key: 'stock', module: 'inventory', setter: setStock },
           { key: 'salesData', module: 'sales', setter: setSalesData },
@@ -84,7 +85,6 @@ const App = () => {
         let importedCount = 0;
 
         for (const item of syncMap) {
-          // استخدام الاتصال عبر الـ Native HTTP لتخطي مشاكل الـ CORS بالكامل 🚀
           const options = {
             url: `https://nawah-ai-db.vercel.app/api/engine?module_name=${item.module}&record_id=${item.key}_records`,
             headers: { 'Cache-Control': 'no-cache' }
@@ -92,31 +92,36 @@ const App = () => {
 
           const response = await CapacitorHttp.get(options);
 
-          // في كاباسيتور ريسبرنس ترجع النتيجة داخل السيرفر في حقل data مباشرة وبصيغة مفكوكة تلقائياً
           if (response.status === 200 && response.data) {
-            const cloudRecords = response.data;
+            let cloudRecords = response.data;
             
+            // 💡 معالجة ذكية: إذا كان السيرفر يعيد البيانات داخل حقل تعشيش مثل payload أو records نقوم بفكها
+            if (cloudRecords && !Array.isArray(cloudRecords) && typeof cloudRecords === 'object') {
+              cloudRecords = cloudRecords.payload || cloudRecords.records || cloudRecords.data || [];
+            }
+
+            // التوزيع الفعلي على الصفحات باسمها بمجرد التأكد من أنها مصفوفة بيانات صالحة
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
-              item.setter(cloudRecords); 
-              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
+              item.setter(cloudRecords); // 🎯 ضخ البيانات مباشرة داخل الـ State الخاص بالصفحة
+              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); // حماية التخزين المحلي الآمن
               importedCount++;
             }
           }
         }
 
-        // إنهاء مرحلة الإقلاع بنجاح وبدء تفعيل خطوط المراقبة والرفع الحية للمبيعات والمخازن
+        // إنهاء مرحلة التحميل بأمان لفتح خطوط البيع والمزامنة الخلفية الحية للبيانات الجديدة
         setIsInitialLoading(false);
 
         if (importedCount > 0) {
-          setSyncStatus('✅ تم استعادة كافة البيانات من nawah.ai بنجاح');
-          showSwal('تمت استعادة بياناتك السحابية بنجاح!', 'success');
+          setSyncStatus('✅ تم توزيع واستعادة كافة بيانات الموديولات بنجاح');
+          showSwal('تمت استعادة بياناتك السحابية وتحديث الواجهات!', 'success');
         } else {
-          setSyncStatus('✅ قاعدة بيانات جديدة ونظيفة ومستقرة');
+          setSyncStatus('✅ قاعدة بيانات سحابية مستقرة وجاهزة للعمل');
         }
       } catch (err) {
-        console.error("🚨 Capacitor Http Download Error:", err);
+        console.error("🚨 Cloud Download & Distribution Error:", err);
         setIsInitialLoading(false);
-        setSyncStatus('⚠️ فشل سحب النسخة الاحتياطية عبر محرك الهاتف');
+        setSyncStatus('⚠️ خطأ أثناء توزيع وتوطين البيانات السحابية');
       }
     };
 
