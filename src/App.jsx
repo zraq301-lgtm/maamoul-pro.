@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
-import { CapacitorHttp } from '@capacitor/core';
 
-// استيراد المكونات
+// استيراد دالة الاتصال الموحدة والمؤمنة بمحرك v2
+import { saveToNawahDB } from './services/db';
+
+// استيراد المكونات المتوافقة مع ملفات النظام الفعلي
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
 import Sales from './components/Sales';
@@ -19,15 +21,6 @@ import Settings from './components/Settings';
 
 import './App.css';
 
-// --- إعدادات مستودع Nawah AI-DB ---
-const DB_CONFIG = {
-  owner: 'zraq301-lgtm',
-  repo: 'Nawah-AI-db',
-  // 🔒 حذف التوكن القديم الميت واعتماد الحقن التلقائي الذكي من السيرفر
-  token: import.meta.env.VITE_GITHUB_TOKEN, 
-  tenant: 'nawah-core'
-};
-
 const showSwal = (title, icon = 'success') => {
   Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
 };
@@ -43,80 +36,7 @@ const App = () => {
     } catch (e) { return initialValue; }
   };
 
-  const toBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
-
-  const mapDataToNawahSchema = (collectionName, data) => {
-    if (!Array.isArray(data)) return data;
-    return data.map(item => {
-      switch (collectionName) {
-        case 'inventory':
-          return {
-            id: item.id?.toString() || `INV-${Date.now()}`,
-            date: item.date || new Date().toISOString(),
-            vendorId: item.supplier || 'مورد عام',
-            totalAmount: parseFloat(item.total || 0),
-            status: 'completed',
-            items: item.items || [{
-              productId: item.item,
-              name: item.item,
-              quantity: parseFloat(item.quantity || 0),
-              unitPrice: parseFloat(item.price || 0),
-              total: parseFloat(item.total || 0)
-            }]
-          };
-        case 'stock':
-          return {
-            id: item.id?.toString() || item.name,
-            name: item.name,
-            sku: item.sku || `SKU-${item.name}`,
-            stock: parseFloat(item.balance || 0),
-            price: parseFloat(item.price || 0),
-            category: item.category || 'عام'
-          };
-        case 'salesData':
-          return {
-            id: item.id?.toString() || `SAL-${Date.now()}`,
-            date: item.date || new Date().toISOString(),
-            customerId: item.customer || 'عميل نقدي',
-            totalAmount: parseFloat(item.total || 0),
-            status: 'completed',
-            items: item.items || []
-          };
-        default:
-          return item;
-      }
-    });
-  };
-
-  const syncWithNawahDB = async (collectionName, rawData) => {
-    if (!rawData || rawData.length === 0) return false;
-    try {
-      const formattedData = mapDataToNawahSchema(collectionName, rawData);
-      const remoteNames = { inventory: 'purchase_orders', stock: 'products', salesData: 'sales_orders', productionData: 'manufacturing_orders', expenses: 'ledger' };
-      const folderName = remoteNames[collectionName] || collectionName;
-      const path = `database/${DB_CONFIG.tenant}/${folderName}/${folderName}.json`;
-      const url = `https://api.github.com/repos/${DB_CONFIG.owner}/${DB_CONFIG.repo}/contents/${path}`;
-      
-      let sha = null;
-      try {
-        const getRes = await CapacitorHttp.get({ url, headers: { 'Authorization': `token ${DB_CONFIG.token}`, 'Cache-Control': 'no-cache' } });
-        if (getRes.status === 200) sha = getRes.data.sha;
-      } catch (e) {}
-
-      const putRes = await CapacitorHttp.put({
-        url,
-        headers: { 'Authorization': `token ${DB_CONFIG.token}`, 'Content-Type': 'application/json' },
-        data: { message: `Automated Background Sync`, content: toBase64(JSON.stringify(formattedData, null, 2)), sha: sha }
-      });
-
-      return putRes.status === 200 || putRes.status === 201;
-    } catch (error) {
-      console.error("❌ Sync Error", error);
-      return false;
-    }
-  };
-
-  // --- States ---
+  // --- States لإدارة البيانات محلياً في الواجهة ---
   const [stock, setStock] = useState(() => loadInitial('stock', []));
   const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
   const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
@@ -129,7 +49,7 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // 1. مزامنة البيانات محلياً
+  // 1. مزامنة البيانات وتحديث الحفظ المحلي (LocalStorage) فوراً عند التغيير
   useEffect(() => { localStorage.setItem('stock', JSON.stringify(stock)); }, [stock]);
   useEffect(() => { localStorage.setItem('salesData', JSON.stringify(salesData)); }, [salesData]);
   useEffect(() => { localStorage.setItem('inventory', JSON.stringify(inventory)); }, [inventory]);
@@ -142,116 +62,72 @@ const App = () => {
   useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
   useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
 
-  // --- منطق جلب البيانات الحي وتوزيعها تلقائياً على الصفحات ---
+  // 2. محرك المزامنة الخلفية المطور المعتمد كلياً على nawah.ai عبر Vercel
   useEffect(() => {
-    const fetchAndDistributeLiveJSON = async () => {
-      try {
-        setSyncStatus('جاري فحص البيانات الحية...');
-        const remoteNames = { stock: 'products', salesData: 'sales_orders', inventory: 'purchase_orders', productionData: 'manufacturing_orders', expenses: 'ledger' };
-        
-        // استدعاء الأقسام الأساسية المتواجدة على السحابة حالياً لتحديث الواجهات بها
-        const targetKeys = ['stock', 'salesData', 'inventory', 'productionData', 'expenses'];
-        let updatedCount = 0;
-
-        for (const key of targetKeys) {
-          const folderName = remoteNames[key];
-          const path = `database/${DB_CONFIG.tenant}/${folderName}/${folderName}.json`;
-          const rawUrl = `https://raw.githubusercontent.com/${DB_CONFIG.owner}/${DB_CONFIG.repo}/main/${path}?t=${new Date().getTime()}`;
-
-          const response = await CapacitorHttp.get({ url: rawUrl });
-          
-          if (response.status === 200 && response.data) {
-            let data = response.data;
-            if (typeof data === 'string') data = JSON.parse(data);
-            const records = Array.isArray(data) ? data : (data.records || []);
-
-            if (records.length > 0) {
-              // توزيع البيانات المسترجعة بشكل ديناميكي ومباشر على الـ States المقابلة لها
-              if (key === 'stock') setStock(records);
-              if (key === 'salesData') setSalesData(records);
-              if (key === 'inventory') setInventory(records);
-              if (key === 'productionData') setProductionData(records);
-              if (key === 'expenses') setExpenses(records);
-              updatedCount++;
-            }
-          }
-        }
-
-        if (updatedCount > 0) {
-          setSyncStatus('✅ تم جلب البيانات الحية وتحديث الصفحات');
-        } else {
-          setSyncStatus('مستقر');
-        }
-      } catch (err) {
-        console.error("❌ Live Fetch Error", err);
-        setSyncStatus('⚠️ خطأ في قراءة البيانات الحية');
-      }
-    };
-
-    // تشغيل جلب البيانات بعد ثانيتين من فتح التطبيق، وتكرار العملية كل دقيقتين للمزامنة الخلفية الحية
-    const initialFetchTimer = setTimeout(fetchAndDistributeLiveJSON, 2000);
-    const liveFetchInterval = setInterval(fetchAndDistributeLiveJSON, 120000);
-
-    return () => {
-      clearTimeout(initialFetchTimer);
-      clearInterval(liveFetchInterval);
-    };
-  }, []);
-
-  // 2. محرك المزامنة المطور لكشف الأخطاء وتنبيهك فوراً بالنجاح
-  useEffect(() => {
-    const runBackgroundSync = async () => {
+    const runBackgroundSyncToNawah = async () => {
       try {
         let hasDataToSync = false;
         let successCount = 0;
-        
-        const syncKeys = ['stock', 'salesData', 'inventory', 'expenses', 'waste', 'suppliers', 'customers', 'productionData', 'waitingList', 'cashBook', 'staff'];
-        
-        for (const key of syncKeys) {
-          const localData = localStorage.getItem(key);
+
+        // مصفوفة تحتوي على المفاتيح المحلية والموديول المقابل المسموح به في سيرفر الـ API
+        const syncMap = [
+          { key: 'stock', module: 'inventory' },
+          { key: 'salesData', module: 'sales' },
+          { key: 'inventory', module: 'purchases' },
+          { key: 'productionData', module: 'manufacturing' },
+          { key: 'expenses', module: 'dashboard' }
+        ];
+
+        for (const item of syncMap) {
+          const localData = localStorage.getItem(item.key);
           if (localData) {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
               hasDataToSync = true;
-              setSyncStatus(`جاري رفع ${key}...`);
-              const collectionName = key === 'waitingList' ? 'supplierWaitingList' : key;
-              const isSuccess = await syncWithNawahDB(collectionName, parsed);
-              if (isSuccess) successCount++;
+              setSyncStatus(`جاري تحديث السحابة لموديول ${item.key}...`);
+              
+              // إرسال المصفوفة كاملة كمستند موحد برقم تعريفي ثابت لكل قسم
+              const res = await saveToNawahDB(item.module, `${item.key}_records`, parsed);
+              if (res.success) successCount++;
             }
           }
         }
 
         if (!hasDataToSync) {
-          setSyncStatus('✅ لا توجد بيانات جديدة للرفع');
+          setSyncStatus('✅ قاعدة البيانات السحابية متطابقة وثابتة');
         } else if (successCount > 0) {
-          setSyncStatus('✅ تم الرفع السحابي بنجاح');
-          showSwal('تم تحديث السحابة وإنشاء الملفات!', 'success');
+          setSyncStatus('✅ nawah.ai مزامنة كاملة بنجاح 🔐');
+          showSwal('تم التزامن الآمن مع محرك nawah.ai', 'success');
         } else {
-          setSyncStatus('⚠️ فشل الرفع (تحقق من التوكن)');
+          setSyncStatus('⚠️ فشل التزامن المؤقت مع السيرفر');
         }
       } catch (err) {
-        setSyncStatus('⚠️ خطأ في المزامنة');
+        setSyncStatus('⚠️ خطأ اتصال بمستودع المحرك');
       }
     };
 
-    // تقليص مهلة التشغيل الأولى لـ 4 ثوانٍ فقط لتراها سريعاً بعد إدخال البيانات
-    const initialTimer = setTimeout(runBackgroundSync, 4000);
-    const interval = setInterval(runBackgroundSync, 60000);
+    // التشغيل التلقائي الأول بعد 5 ثوانٍ، ويتكرر دورياً كل دقيقة ونصف في الخلفية لضمان الاستقرار الحركي للبيانات
+    const initialTimer = setTimeout(runBackgroundSyncToNawah, 5000);
+    const interval = setInterval(runBackgroundSyncToNawah, 90000);
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [stock, salesData, inventory]); // نراقب الأساسيات هنا لتحفيز الرفع الفوري عند الإضافة
+  }, [stock, salesData, inventory, productionData, expenses]);
 
-  // --- Financial Logic ---
+  // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
     const totalPurchasesCash = inventory.filter(p => p.paymentMethod === 'كاش').reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
     const cashBalance = totalIncome - (totalExp + totalPurchasesCash);
-    return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash };
-  }, [salesData, expenses, inventory]);
+    
+    // حساب قيمة البضائع المخزنية الإجمالية بشكل تقديري
+    const stockValue = stock.reduce((sum, item) => sum + ((parseFloat(item.balance) || 0) * (parseFloat(item.price) || 0)), 0);
+
+    return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
+  }, [salesData, expenses, inventory, stock]);
 
   const handleSavePurchase = (p) => {
     setInventory(prev => [...prev, p]);
@@ -266,29 +142,77 @@ const App = () => {
     });
   };
 
+  // --- محرك عرض وإدارة الصفحات بالشاشات الجديدة والـ Props المتخصصة ---
   const renderPage = () => {
-    const props = { onBack: () => setActivePage('dashboard'), stock, inventory, salesData };
+    const props = { onBack: () => setActivePage('dashboard'), stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock };
+    
     switch (activePage) {
-      case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} productionHistory={productionData} stock={stock} />;
-      case 'inventory': return <Inventory {...props} categories={stock} onAddItem={handleSavePurchase} />;
-      case 'purchases': return <PurchasesManager {...props} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
-      case 'sales': return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
-      case 'production': return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
-      case 'reports': return <Reports {...props} />;
-      case 'expenses': return <Expenses {...props} onSave={(e) => setExpenses(prev => [...prev, e])} />;
-      default: return <Dashboard setActivePage={setActivePage} stats={financialStats} productionHistory={productionData} stock={stock} />;
+      case 'dashboard': 
+        return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
+      
+      case 'PurchasesManager': 
+        return <PurchasesManager {...props} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
+      
+      case 'Sales': 
+        return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
+      
+      case 'ProductionManager': 
+        return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
+      
+      case 'Inventory': 
+        return <Inventory {...props} categories={stock} onAddItem={handleSavePurchase} />;
+      
+      case 'Waste': 
+        return <Waste {...props} onSaveWaste={(w) => setWaste(prev => [...prev, w])} />;
+      
+      case 'Expenses': 
+        return <Expenses {...props} onSave={(e) => setExpenses(prev => [...prev, e])} />;
+      
+      case 'Suppliers': 
+        return <Suppliers {...props} onSaveSupplier={(sup) => setSuppliers(prev => [...prev, sup])} />;
+      
+      case 'Financials': 
+        return <Financials {...props} stats={financialStats} cashBook={cashBook} />;
+      
+      case 'Reports': 
+        return <Reports {...props} productionHistory={productionData} stats={financialStats} />;
+      
+      case 'Customers': 
+        return <Customers {...props} onSaveCustomer={(c) => setCustomers(prev => [...prev, c])} />;
+      
+      case 'StaffManagement': 
+        return <StaffManagement {...props} onUpdateStaff={(st) => setStaff(st)} />;
+      
+      case 'Settings': 
+        return <Settings {...props} />;
+      
+      default: 
+        return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
     }
   };
 
   return (
-    <div className="app-container" style={{ direction: 'rtl' }}>
-      <div style={{ background: '#0f172a', color: '#38bdf8', fontSize: '11px', padding: '4px 10px', textAlign: 'center', fontWeight: 'bold' }}>
-        حالة الاتصال السحابي: {syncStatus}
+    <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
+      {/* البار العلوي لحالة التزامن لمحرك nawah.ai */}
+      <div style={{ background: '#0f172a', color: '#0ea5e9', fontSize: '11px', padding: '6px 10px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid rgba(14, 165, 233, 0.15)' }}>
+        🤖 nawah.ai Cloud Engine Engine Status: {syncStatus}
       </div>
+
       <main className="main-content">{renderPage()}</main>
+
+      {/* البار السفلي الذكي للتنقل المباشر والسلس */}
       <nav className="bottom-nav">
-        {[{id:'dashboard', label:'الرئيسية'}, {id:'inventory', label:'المخزن'}, {id:'purchases', label:'المشتريات'}, {id:'reports', label:'التقارير'}].map(item => (
-          <button key={item.id} className={`nav-item ${activePage === item.id ? 'active' : ''}`} onClick={() => setActivePage(item.id)}>
+        {[
+          { id: 'dashboard', label: 'الرئيسية' },
+          { id: 'Inventory', label: 'المخزن' },
+          { id: 'PurchasesManager', label: 'المشتريات' },
+          { id: 'Reports', label: 'التقارير' }
+        ].map(item => (
+          <button 
+            key={item.id} 
+            className={`nav-item ${activePage === item.id ? 'active' : ''}`} 
+            onClick={() => setActivePage(item.id)}
+          >
             <span className="nav-label">{item.label}</span>
           </button>
         ))}
