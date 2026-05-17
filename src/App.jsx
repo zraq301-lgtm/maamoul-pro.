@@ -62,14 +62,63 @@ const App = () => {
   useEffect(() => { localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook]);
   useEffect(() => { localStorage.setItem('staff', JSON.stringify(staff)); }, [staff]);
 
-  // 2. محرك المزامنة الخلفية المطور المعتمد كلياً على nawah.ai عبر Vercel
+  // 2. 📥 محرك جلب واستعادة البيانات العكسي السحابي التلقائي (عند إقلاع التطبيق لأول مرة)
+  useEffect(() => {
+    const downloadDataFromNawahCloud = async () => {
+      try {
+        setSyncStatus('🔄 جاري فحص واستيراد بياناتك السحابية الآمنة...');
+        
+        // خريطة الربط بين الـ States والموديولات المعرفة بالسيرفر
+        const syncMap = [
+          { key: 'stock', module: 'inventory', setter: setStock },
+          { key: 'salesData', module: 'sales', setter: setSalesData },
+          { key: 'inventory', module: 'purchases', setter: setInventory },
+          { key: 'productionData', module: 'manufacturing', setter: setProductionData },
+          { key: 'expenses', module: 'dashboard', setter: setExpenses }
+        ];
+
+        let importedCount = 0;
+
+        for (const item of syncMap) {
+          // إرسال طلب GET للسيرفر مع تمرير اسم الموديول واسم الملف المطلوب
+          const response = await fetch(`https://nawah-ai-db.vercel.app/api/engine?module_name=${item.module}&record_id=${item.key}_records`, {
+            method: 'GET',
+            headers: { 'Cache-Control': 'no-cache' }
+          });
+
+          if (response.ok) {
+            const cloudRecords = await response.json();
+            if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
+              item.setter(cloudRecords); // تعبئة الـ State بالبيانات المسترجعة من السحابة فوراً
+              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); // تأمين التخزين المحلي
+              importedCount++;
+            }
+          }
+        }
+
+        if (importedCount > 0) {
+          setSyncStatus('✅ تم استعادة كافة البيانات من nawah.ai بنجاح');
+          showSwal('تمت استعادة بياناتك السحابية المشفرة!', 'success');
+        } else {
+          setSyncStatus('✅ قاعدة بيانات جديدة ونظيفة ومستقرة');
+        }
+      } catch (err) {
+        console.error("🚨 Cloud Download Error:", err);
+        setSyncStatus('⚠️ فشل سحب النسخة الاحتياطية السحابية');
+      }
+    };
+
+    // تشغيل عملية استيراد وبناء قاعدة البيانات مرة واحدة عند فتح التطبيق
+    downloadDataFromNawahCloud();
+  }, []);
+
+  // 3. 📤 محرك المزامنة الخلفية المطور المسؤول عن رفع البيانات وتحديث السحابة دورياً
   useEffect(() => {
     const runBackgroundSyncToNawah = async () => {
       try {
         let hasDataToSync = false;
         let successCount = 0;
 
-        // مصفوفة تحتوي على المفاتيح المحلية والموديول المقابل المسموح به في سيرفر الـ API
         const syncMap = [
           { key: 'stock', module: 'inventory' },
           { key: 'salesData', module: 'sales' },
@@ -86,7 +135,7 @@ const App = () => {
               hasDataToSync = true;
               setSyncStatus(`جاري تحديث السحابة لموديول ${item.key}...`);
               
-              // إرسال المصفوفة كاملة كمستند موحد برقم تعريفي ثابت لكل قسم
+              // رفع المصفوفة المتكاملة لتخزينها دورياً بنظام الأرشفة
               const res = await saveToNawahDB(item.module, `${item.key}_records`, parsed);
               if (res.success) successCount++;
             }
@@ -97,7 +146,6 @@ const App = () => {
           setSyncStatus('✅ قاعدة البيانات السحابية متطابقة وثابتة');
         } else if (successCount > 0) {
           setSyncStatus('✅ nawah.ai مزامنة كاملة بنجاح 🔐');
-          showSwal('تم التزامن الآمن مع محرك nawah.ai', 'success');
         } else {
           setSyncStatus('⚠️ فشل التزامن المؤقت مع السيرفر');
         }
@@ -106,9 +154,9 @@ const App = () => {
       }
     };
 
-    // التشغيل التلقائي الأول بعد 5 ثوانٍ، ويتكرر دورياً كل دقيقة ونصف في الخلفية لضمان الاستقرار الحركي للبيانات
-    const initialTimer = setTimeout(runBackgroundSyncToNawah, 5000);
-    const interval = setInterval(runBackgroundSyncToNawah, 90000);
+    // المزامنة الخلفية الأولى تبدأ بعد 10 ثوانٍ من الإقلاع (لإعطاء أولوية للسحب التلقائي أولاً)، وتتكرر كل دقيقتين
+    const initialTimer = setTimeout(runBackgroundSyncToNawah, 10000);
+    const interval = setInterval(runBackgroundSyncToNawah, 120000);
 
     return () => {
       clearTimeout(initialTimer);
@@ -123,7 +171,6 @@ const App = () => {
     const totalPurchasesCash = inventory.filter(p => p.paymentMethod === 'كاش').reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
     const cashBalance = totalIncome - (totalExp + totalPurchasesCash);
     
-    // حساب قيمة البضائع المخزنية الإجمالية بشكل تقديري
     const stockValue = stock.reduce((sum, item) => sum + ((parseFloat(item.balance) || 0) * (parseFloat(item.price) || 0)), 0);
 
     return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
@@ -195,7 +242,7 @@ const App = () => {
     <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
       {/* البار العلوي لحالة التزامن لمحرك nawah.ai */}
       <div style={{ background: '#0f172a', color: '#0ea5e9', fontSize: '11px', padding: '6px 10px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid rgba(14, 165, 233, 0.15)' }}>
-        🤖 nawah.ai Cloud Engine Engine Status: {syncStatus}
+        🤖 nawah.ai Cloud Engine Status: {syncStatus}
       </div>
 
       <main className="main-content">{renderPage()}</main>
