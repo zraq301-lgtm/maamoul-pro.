@@ -1,37 +1,29 @@
 /**
- * دالة إرسال وحفظ البيانات في محرك قاعدة بيانات nawah.ai
- * @param {string} moduleName - اسم الموديول المستهدف (مثال: 'sales', 'inventory', 'ProductionManager')
- * @param {string} recordId - المعرف الفريد للملف (مثال: 'inv_1002' أو رقم السيريال)
- * @param {Object} payload - البيانات الفعلية المراد تخزينها بصيغة Object
+ * 📥 دالة مستقلة ومنفصلة لجلب واستعادة البيانات السحابية لموديول معين
+ * @param {string} moduleName - اسم القسم (مثل: inventory, sales, purchases)
+ * @param {string} recordId - الرقم التعريفي أو اسم السجل (مثل: stock_records)
+ * @returns {Promise<Array>} - المصفوفة المسترجعة من السحابة أو مصفوفة فارغة عند عدم الوجود
  */
-export const saveToNawahDB = async (moduleName, recordId, payload) => {
-  const API_URL = 'https://nawah-ai-db.vercel.app/api/engine';
-
+export const loadFromNawahDB = async (moduleName, recordId) => {
   try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        module_name: moduleName,
-        record_id: recordId,
-        payload: payload
-      })
-    });
+    const response = await fetch(
+      `https://nawah-ai-db.vercel.app/api/engine?module_name=${moduleName}&record_id=${recordId}`,
+      {
+        method: 'GET',
+        headers: { 'Cache-Control': 'no-cache' }
+      }
+    );
 
-    const result = await response.json();
-
-    if (response.ok && result.success) {
-      console.log('✅ تم الحفظ بنجاح في جيت هب:', result.message);
-      return { success: true, message: result.message };
-    } else {
-      console.error('❌ فشل الحفظ في المحرك:', result.error || result.details);
-      return { success: false, error: result.error || 'حدث خطأ أثناء الرفع' };
+    if (response.ok) {
+      const cloudRecords = await response.json();
+      // التأكد من أن النتيجة القادمة هي مصفوفة فعلية لتجنب أي أخطاء بالواجهة
+      if (Array.isArray(cloudRecords)) {
+        return cloudRecords;
+      }
     }
-
+    return []; // إرجاع مصفوفة فارغة إذا كان الملف جديداً أو فارغاً على السيرفر
   } catch (error) {
-    console.error('🚨 خطأ في الاتصال بالسيرفر:', error.message);
-    return { success: false, error: error.message };
+    console.error(`🚨 الخطأ في دالة جلب الموديول ${moduleName}:`, error);
+    throw error; // تمرير الخطأ لكي يمسكه التطبيق الرئيسي ويعرض التنبيه للمستخدم
   }
 };
