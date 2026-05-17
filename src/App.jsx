@@ -86,8 +86,17 @@ const App = () => {
 
         for (const item of syncMap) {
           const options = {
-            url: `https://nawah-ai-db.vercel.app/api/engine?module_name=${item.module}&record_id=${item.key}_records`,
-            headers: { 'Cache-Control': 'no-cache' }
+            url: `https://nawah-ai-db.vercel.app/api/get-engine-data`,
+            method: 'GET', // 🎯 تحويل الاستدعاء إلى طلب GET مباشر ومفتوح
+            headers: { 
+              'Cache-Control': 'no-cache',
+              'Accept': 'application/json'
+            },
+            // تمرير المتغيرات كـ Query parameters مرافقة للرابط الـ GET الصريح
+            params: {
+              module_name: item.module,
+              record_id: `${item.key}_records`
+            }
           };
 
           const response = await CapacitorHttp.get(options);
