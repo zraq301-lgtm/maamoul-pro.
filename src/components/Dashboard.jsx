@@ -36,7 +36,6 @@ const Dashboard = ({ setActivePage, stats, staffCount }) => {
     // معادلة محاكاة ديناميكية تعتمد على صافي الربح الحالي لرسم منحنى مخصص للنشاط التجاري
     return months.map((month, index) => {
       const baseFactor = Math.sin((index + 1) * 0.8); // دالة تموج جيبية لرسم الصعود والهبوط الاقتصادي
-      const profitImpact = (s.netProfit || 5000) * 0.15;
       
       const targetIncome = Math.max(2000, Math.round((s.totalIncome || 12000) * 0.08 + (baseFactor * 3000) + 1500));
       const targetExpenses = Math.max(1000, Math.round((s.totalExpenses || 4000) * 0.08 + (Math.cos(index) * 1000) + 800));
@@ -100,7 +99,7 @@ const Dashboard = ({ setActivePage, stats, staffCount }) => {
       }
     } catch (error) {
       console.error("🚨 AI Engine Sync Failure:", error);
-      setAiInsight('⚠️ تعذر إتمام التحليل المباشر مع السيرفر. تم إعداد رؤية محلية: البيانات الحالية مستقرة ومؤشر قيمة المخزون الحالي يعزز أمان عمليات التوزيع.');
+      setAiInsight('⚠️ تعذر إتمام التحليل المباشر مع السيرفر. تم إعداد رؤية محلية لبيانات Maamoul الحالية: المؤشرات مستقرة وقيمة المخزون الحالي تعزز أمان العمليات.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -267,25 +266,6 @@ const Dashboard = ({ setActivePage, stats, staffCount }) => {
             <span style={{ color: '#475569' }}>منحنى الهبوط/المصروفات</span>
           </div>
         </div>
-      </div>
-
-      {/* قسم رصد حجم توزيع واستقرار حركة السوق الإقليمي */}
-      <div className="glass-card" style={{ padding: '16px', marginBottom: '20px', borderRadius: '20px' }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <BarChart size={18} color="#2ecc71" /> تحليل واستقرار السوق المستهدف (nawah.ai Analytics)
-        </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '4px' }}>حجم الطلب واستقرار التوزيع الحالي</div>
-            <div style={{ width: '100%', backgroundColor: '#f1f5f9', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{ width: '78%', backgroundColor: '#2ecc71', height: '100%' }}></div>
-            </div>
-          </div>
-          <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#2ecc71' }}>78%</div>
-        </div>
-        <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.4' }}>
-          💡 رصد خوارزمي: هناك استقرار ملحوظ في سحب موديول المنتجات المخزنية، ومؤشر الطلب الإقليمي لنظام Maamoul في تصاعد مستمر.
-        </p>
       </div>
 
       {/* مصفوفة الأزرار وتوجيه الموديولات التلقائي */}
