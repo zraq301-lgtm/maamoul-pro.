@@ -3,8 +3,10 @@ import {
   UserCheck, UserPlus, Save, ArrowRight, Edit3, Trash2,
   X, Phone, Briefcase, DollarSign, Calendar, AlertCircle, Search
 } from 'lucide-react';
+import Swal from 'sweetalert2';
 
-const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDeleteStaff }) => {
+// 🎯 تم توحيد الاعتماد على دالة onUpdateStaff لتحديث كامل مصفوفة العمالة محلياً وسحابياً فوراً
+const StaffManagement = ({ onBack, staff = [], onUpdateStaff, deleteCloudData }) => {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -22,17 +24,28 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!newEmployee.name || !newEmployee.salary) {
-      alert("يرجى إدخال اسم العامل والراتب");
+      Swal.fire({ title: 'تنبيه', text: 'يرجى إدخال اسم العامل والراتب الأساسي أولاً', icon: 'warning', confirmButtonText: 'حسناً' });
       return;
     }
+
     if (editingId) {
-      onUpdateStaff(editingId, { ...newEmployee, salary: parseFloat(newEmployee.salary) || 0 });
+      // 📝 حالة تعديل بيانات عامل موجود مسبقاً
+      const updatedList = staff.map(emp => 
+        emp.id === editingId ? { ...newEmployee, id: editingId, salary: parseFloat(newEmployee.salary) || 0 } : emp
+      );
+      onUpdateStaff(updatedList);
       setEditingId(null);
-      alert("تم تحديث بيانات العامل بنجاح");
+      
+      Swal.fire({ title: 'تم التحديث', text: 'تم تعديل بيانات العامل بنجاح وتأمينها 🔐', icon: 'success', timer: 1500, showConfirmButton: false, toast: true });
     } else {
-      onAddStaff({ ...newEmployee, id: Date.now(), salary: parseFloat(newEmployee.salary) || 0 });
-      alert("تم إضافة العامل بنجاح");
+      // 🚀 حالة إضافة عامل جديد كلياً - تعمل الآن مباشرة على المصفوقة الكلية وتفعل السحابة فوراً
+      const newStaffMember = { ...newEmployee, id: Date.now(), salary: parseFloat(newEmployee.salary) || 0 };
+      onUpdateStaff([...staff, newStaffMember]);
+      
+      Swal.fire({ title: 'تم الحفظ', text: 'تم تسجيل العامل الجديد في قاعدة البيانات السحابية 🚀', icon: 'success', timer: 1500, showConfirmButton: false, toast: true });
     }
+
+    // إعادة تصفير وإغلاق النموذج
     setNewEmployee({ name: '', role: 'عامل', salary: '', phone: '', hireDate: new Date().toISOString().split('T')[0], status: 'نشط' });
     setShowAdd(false);
   };
@@ -47,8 +60,23 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
   };
 
   const handleDelete = (id, name) => {
-    if (!confirm(`هل أنت متأكد من حذف العامل "${name}"؟`)) return;
-    onDeleteStaff(id);
+    Swal.fire({
+      title: 'هل أنت متأكد؟',
+      text: `أنت على وشك حذف العامل "${name}" نهائياً من مصفوفة النظام.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e74c3c',
+      cancelButtonColor: '#94a3b8',
+      confirmButtonText: 'نعم، احذفه',
+      cancelButtonText: 'إلغاء'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const remainingStaff = staff.filter(emp => emp.id !== id);
+        onUpdateStaff(remainingStaff);
+        
+        Swal.fire({ title: 'تم الحذف', text: 'تم إقصاء السجل وتحديث السحابة تلقائياً', icon: 'success', timer: 1500, showConfirmButton: false, toast: true });
+      }
+    });
   };
 
   const handleCancel = () => {
@@ -62,12 +90,12 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
 
   return (
     <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
-      <div className="page-header">
+      <div className="page-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
         <UserCheck size={28} color="#0ea5e9" />
-        <h2>إدارة العمالة</h2>
+        <h2 style={{ margin: 0, fontSize: '1.5rem', color: '#1e293b' }}>إدارة العمالة</h2>
       </div>
 
-      {/* Summary Stats */}
+      {/* العدادات العلوية */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '15px' }}>
         <div className="glass-card" style={{ padding: '12px', textAlign: 'center' }}>
           <div style={{ fontSize: '0.75rem', color: '#64748b' }}>إجمالي العمال</div>
@@ -83,23 +111,23 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
         </div>
       </div>
 
-      {/* Add/Edit Toggle */}
+      {/* زر التبديل والفتح لنموذج الإضافة */}
       {!showAdd && (
         <button
           onClick={() => setShowAdd(true)}
           className="btn-primary"
-          style={{ backgroundColor: '#0ea5e9', marginBottom: '15px', boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#0ea5e9', marginBottom: '15px', width: '100%', boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)' }}
         >
           <UserPlus size={20} /> إضافة عامل جديد
         </button>
       )}
 
-      {/* Add/Edit Form */}
+      {/* نموذج الإضافة والتعديل */}
       {showAdd && (
-        <div className="glass-card" style={{ marginBottom: '20px', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
+        <div className="glass-card" style={{ marginBottom: '20px', padding: '20px', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h3 style={{ margin: 0, fontSize: '1rem', color: '#0ea5e9' }}>
-              {editingId ? 'تعديل بيانات العامل' : 'بيانات العامل الجديد'}
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0ea5e9' }}>
+              {editingId ? 'تعديل بيانات العامل الحالي' : 'بيانات العامل الجديد'}
             </h3>
             <button onClick={handleCancel} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
           </div>
@@ -107,37 +135,37 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
           <form onSubmit={handleSubmit}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <div>
-                <label className="form-label"><UserCheck size={14} color="#0ea5e9" /> الاسم الكامل</label>
-                <input className="glass-input" placeholder="اسم العامل" value={newEmployee.name} onChange={e => setNewEmployee({ ...newEmployee, name: e.target.value })} style={{ marginBottom: '10px' }} />
+                <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><UserCheck size={14} color="#0ea5e9" /> الاسم الكامل</label>
+                <input className="glass-input" placeholder="اسم العامل" value={newEmployee.name} onChange={e => setNewEmployee({ ...newEmployee, name: e.target.value })} style={{ marginBottom: '10px', width: '100%' }} />
               </div>
               <div>
-                <label className="form-label"><Briefcase size={14} color="#0ea5e9" /> الوظيفة</label>
-                <select className="glass-input" value={newEmployee.role} onChange={e => setNewEmployee({ ...newEmployee, role: e.target.value })} style={{ marginBottom: '10px' }}>
+                <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><Briefcase size={14} color="#0ea5e9" /> الوظيفة</label>
+                <select className="glass-input" value={newEmployee.role} onChange={e => setNewEmployee({ ...newEmployee, role: e.target.value })} style={{ marginBottom: '10px', width: '100%', height: '44px' }}>
                   {roles.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
               </div>
               <div>
-                <label className="form-label"><DollarSign size={14} color="#0ea5e9" /> الراتب الأساسي</label>
-                <input type="number" className="glass-input" placeholder="0.00" value={newEmployee.salary} onChange={e => setNewEmployee({ ...newEmployee, salary: e.target.value })} style={{ marginBottom: '10px' }} />
+                <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><DollarSign size={14} color="#0ea5e9" /> الراتب الأساسي</label>
+                <input type="number" className="glass-input" placeholder="0.00" value={newEmployee.salary} onChange={e => setNewEmployee({ ...newEmployee, salary: e.target.value })} style={{ marginBottom: '10px', width: '100%' }} />
               </div>
               <div>
-                <label className="form-label"><Phone size={14} color="#0ea5e9" /> رقم الهاتف</label>
-                <input className="glass-input" placeholder="01xxxxxxxxx" value={newEmployee.phone} onChange={e => setNewEmployee({ ...newEmployee, phone: e.target.value })} style={{ marginBottom: '10px' }} />
+                <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><Phone size={14} color="#0ea5e9" /> رقم الهاتف</label>
+                <input className="glass-input" placeholder="01xxxxxxxxx" value={newEmployee.phone} onChange={e => setNewEmployee({ ...newEmployee, phone: e.target.value })} style={{ marginBottom: '10px', width: '100%' }} />
               </div>
               <div>
-                <label className="form-label"><Calendar size={14} color="#0ea5e9" /> تاريخ التعيين</label>
-                <input type="date" className="glass-input" value={newEmployee.hireDate} onChange={e => setNewEmployee({ ...newEmployee, hireDate: e.target.value })} style={{ marginBottom: '10px' }} />
+                <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><Calendar size={14} color="#0ea5e9" /> تاريخ التعيين</label>
+                <input type="date" className="glass-input" value={newEmployee.hireDate} onChange={e => setNewEmployee({ ...newEmployee, hireDate: e.target.value })} style={{ marginBottom: '10px', width: '100%', height: '44px' }} />
               </div>
               <div>
-                <label className="form-label">الحالة</label>
-                <select className="glass-input" value={newEmployee.status} onChange={e => setNewEmployee({ ...newEmployee, status: e.target.value })} style={{ marginBottom: '10px' }}>
+                <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}>الحالة</label>
+                <select className="glass-input" value={newEmployee.status} onChange={e => setNewEmployee({ ...newEmployee, status: e.target.value })} style={{ marginBottom: '10px', width: '100%', height: '44px' }}>
                   {statuses.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn-primary" style={{ backgroundColor: '#0ea5e9', boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)', flex: 2 }}>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+              <button type="submit" className="btn-primary" style={{ backgroundColor: '#0ea5e9', boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)', flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                 <Save size={20} /> {editingId ? 'تحديث البيانات' : 'حفظ العامل'}
               </button>
               <button type="button" onClick={handleCancel} className="btn-back" style={{ flex: 1 }}>إلغاء</button>
@@ -146,13 +174,13 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
         </div>
       )}
 
-      {/* Search */}
+      {/* شريط البحث المطور */}
       <div style={{ position: 'relative', marginBottom: '12px' }}>
         <Search style={{ position: 'absolute', right: '14px', top: '14px', color: '#94a3b8' }} size={20} />
-        <input className="glass-input" placeholder="ابحث بالاسم أو الوظيفة..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ paddingRight: '42px' }} />
+        <input className="glass-input" placeholder="ابحث بالاسم أو الوظيفة..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ paddingRight: '42px', width: '100%' }} />
       </div>
 
-      {/* Staff List */}
+      {/* عرض قائمة الموظفين الفعليين */}
       {filteredStaff.length === 0 ? (
         <div className="glass-card" style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
           <AlertCircle size={32} style={{ marginBottom: '8px', opacity: 0.5 }} />
@@ -164,9 +192,9 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
               <div>
                 <div style={{ fontWeight: 'bold', fontSize: '1rem', color: '#1e293b' }}>{emp.name}</div>
-                <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                   <Briefcase size={12} /> {emp.role}
-                  {emp.phone && <><span style={{ margin: '0 4px' }}>|</span><Phone size={12} /> {emp.phone}</>}
+                  {emp.phone && <><span style={{ color: '#cbd5e1' }}>|</span><Phone size={12} /> {emp.phone}</>}
                 </div>
               </div>
               <span className={`status-badge ${emp.status === 'نشط' ? 'active' : emp.status === 'إجازة' ? 'on-leave' : 'inactive'}`}>
@@ -184,11 +212,12 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+            {/* أزرار الإجراءات السريعة والمحسنة للمس الشاشات بيد واحدة */}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
               <button
                 onClick={() => handleEdit(emp)}
                 style={{
-                  flex: 1, padding: '8px', borderRadius: '10px', border: '1px solid rgba(14, 165, 233, 0.3)',
+                  flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid rgba(14, 165, 233, 0.3)',
                   background: 'rgba(239, 246, 255, 0.8)', color: '#0ea5e9', fontWeight: 'bold',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem'
                 }}
@@ -198,7 +227,7 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
               <button
                 onClick={() => handleDelete(emp.id, emp.name)}
                 style={{
-                  flex: 1, padding: '8px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)',
+                  flex: 1, padding: '10px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.3)',
                   background: 'rgba(254, 242, 242, 0.8)', color: '#e74c3c', fontWeight: 'bold',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem'
                 }}
@@ -210,7 +239,8 @@ const StaffManagement = ({ onBack, staff = [], onAddStaff, onUpdateStaff, onDele
         ))
       )}
 
-      <button onClick={onBack} className="btn-back" style={{ marginTop: '15px' }}>
+      {/* زر العودة للمركزية */}
+      <button onClick={onBack} className="btn-back" style={{ marginTop: '20px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
         <ArrowRight size={18} /> العودة للوحة التحكم
       </button>
     </div>
