@@ -87,12 +87,11 @@ const App = () => {
         for (const item of syncMap) {
           const options = {
             url: `https://nawah-ai-db.vercel.app/api/get-engine-data`,
-            method: 'GET', // 🎯 تحويل الاستدعاء إلى طلب GET مباشر ومفتوح
+            method: 'GET',
             headers: { 
               'Cache-Control': 'no-cache',
               'Accept': 'application/json'
             },
-            // تمرير المتغيرات كـ Query parameters مرافقة للرابط الـ GET الصريح
             params: {
               module_name: item.module,
               record_id: `${item.key}_records`
@@ -104,7 +103,16 @@ const App = () => {
           if (response.status === 200 && response.data) {
             let cloudRecords = response.data;
             
-            // 💡 معالجة ذكية: إذا كان السيرفر يعيد البيانات داخل حقل تعشيش مثل payload أو records نقوم بفكها
+            // 🎯 المفتاح السحري: إذا كانت أداة كاباسيتور قد استلمت البيانات كنص صلب (String)، نقوم بتفكيكها إلى مصفوفة فوراً
+            if (typeof cloudRecords === 'string') {
+              try {
+                cloudRecords = JSON.parse(cloudRecords);
+              } catch (e) {
+                console.error("🚨 خطأ أثناء تفكيك نص البيانات القادم لـ " + item.key, e);
+              }
+            }
+            
+            // 💡 معالجة إضافية: إذا كانت البيانات مغلفة داخل حقول فرعية
             if (cloudRecords && !Array.isArray(cloudRecords) && typeof cloudRecords === 'object') {
               cloudRecords = cloudRecords.payload || cloudRecords.records || cloudRecords.data || [];
             }
