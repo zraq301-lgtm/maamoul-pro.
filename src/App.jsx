@@ -4,6 +4,9 @@ import Swal from 'sweetalert2';
 // استيراد أداة الاتصال الأصلية للهواتف الذكية من كاباسيتور
 import { CapacitorHttp } from '@capacitor/core';
 
+// استيراد الروابط والمحرك الموحد من المسار المطلوب
+import apiService, { apiEndpoints } from './services/db';
+
 // استيراد المكونات المتوافقة مع ملفات النظام الفعلي لنظام Maamoul
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
@@ -70,7 +73,7 @@ const App = () => {
       try {
         setSyncStatus('🔄 جاري استيراد وتوطين كتل مصفوفات ERP من السحابة...');
         
-        // 🎯 تم توسيع المصفوفة لتشمل العملاء والموردين والموظفين بشكل صريح وضخهم في الـ Setters المقابلة لهم
+        // 🎯 تم توسيع مصفوفة لتشمل العملاء والموردين والموظفين بشكل صريح وضخهم في الـ Setters المقابلة لهم
         const syncMap = [
           { key: 'stock', module: 'inventory_module', setter: setStock },
           { key: 'salesData', module: 'sales_module', setter: setSalesData },
