@@ -44,11 +44,12 @@ jobs:
           # إضافة منصة أندرويد وبنائها من الصفر
           npx cap add android
           
-          # توليد الأيقونات والشاشات تلقائياً من المسار المطلوب قبل الـ sync
+          # توليد الأيقونات والشاشات عبر أداة المشروع المعتمدة على المجلد الافتراضي
           if [ -f "resources/ico-foreground.png" ]; then
-            npx @capacitor/assets generate --android --icon-path resources/ico-foreground.png
+            npx capacitor-assets generate --android
           fi
           
+          # مزامنة المشروع بعد تحديث الأيقونات
           npx cap sync android
 
       - name: 6. Inject Identity & Firebase
@@ -78,7 +79,7 @@ jobs:
           # إصلاح تعارض مكتبة bcprov
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
           
-          # بناء الـ APK والـ AAB معاً مع رفع كفاءة الذاكرة لتجنب الانهيار
+          # بناء الـ APK والـ AAB معاً
           ./gradlew assembleRelease bundleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m"
 
       - name: 8. Sign Production Binaries (APK & AAB)
@@ -91,10 +92,10 @@ jobs:
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
           
-          # 1. توقيع ملف الـ APK مع تعديل وتأكيد رقم التوقيع (Min SDK v301) 
+          # 1. توقيع ملف الـ APK وتأكيد رقم التوقيع المستهدف (301)
           $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawh.jks --ks-pass pass:"nawh_pass_2026" --min-sdk-version 301 --out Nawh-Final.apk "$APK_PATH"
           
-          # 2. توقيع ملف الـ AAB المخصص لمتجر جوجل بلاي باستخدام jarsigner
+          # 2. توقيع ملف الـ AAB باستخدام jarsigner ليكون جاهزاً لـ Google Play
           jarsigner -keystore nawh.jks -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" "$AAB_PATH" nawh_alias
           cp "$AAB_PATH" Nawh-Final.aab
 
