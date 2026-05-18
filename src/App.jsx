@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 
-// استيراد أداة الاتصال الأصلية للهواتف الذكية من كاباسيتور
-import { CapacitorHttp } from '@capacitor/core';
-
 // استيراد الروابط والمحرك الموحد من المسار المطلوب
 import apiService, { apiEndpoints } from './services/db';
 
@@ -28,7 +25,7 @@ const showSwal = (title, icon = 'success') => {
   Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
 };
 
-// مصفوفة الربط الموحدة الذكية لمنع التكرار في الأكواد
+// مصفوفة الموديولات لإدارة التخزين المحلي المتكامل لمنع تكرار الأسطر
 const SYNC_MODULES = [
   { key: 'stock', module: 'inventory_module' },
   { key: 'salesData', module: 'sales_module' },
@@ -42,7 +39,7 @@ const SYNC_MODULES = [
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(false);
 
   const loadInitial = (key, initialValue) => {
     try {
@@ -90,126 +87,6 @@ const App = () => {
     localStorage.setItem('waste', JSON.stringify(waste));
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff, isInitialLoading]);
 
-  // 2. 📥 محرك الجلب والتوزيع الذكي من السحابة عند الإقلاع
-  useEffect(() => {
-    const downloadDataFromNawahCloud = async () => {
-      try {
-        let importedCount = 0;
-
-        for (const item of SYNC_MODULES) {
-          const options = {
-            url: `https://nawah-ai-db.vercel.app/api/engine?t=${new Date().getTime()}`,
-            method: 'GET',
-            headers: { 
-              'Cache-Control': 'no-cache, no-store, must-revalidate',
-              'Pragma': 'no-cache',
-              'Accept': 'application/json'
-            },
-            params: {
-              module_name: item.module,
-              record_id: `${item.key}_records`
-            }
-          };
-
-          const response = await CapacitorHttp.get(options);
-
-          if (response.status === 200 && response.data) {
-            let cloudRecords = response.data;
-            
-            if (typeof cloudRecords === 'string') {
-              try { cloudRecords = JSON.parse(cloudRecords); } catch (e) { console.error("🚨 خطأ موديول: " + item.key, e); }
-            }
-
-            if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
-              cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
-            }
-
-            if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
-              if (setters[item.key]) {
-                setters[item.key](cloudRecords);
-                localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
-                importedCount++;
-              }
-            }
-          }
-        }
-
-        setIsInitialLoading(false);
-        if (importedCount > 0) {
-          showSwal('تم تحديث واستعادة كافة الحسابات والعملاء والموردين!', 'success');
-        }
-      } catch (err) {
-        console.error("🚨 Cloud Download Error:", err);
-        setIsInitialLoading(false);
-      }
-    };
-
-    downloadDataFromNawahCloud();
-  }, [setters]);
-
-  // 3. 📤 محرك المزامنة الخلفية الصامت والمطور - رفع تلقائي دون التأثير على واجهة المستخدم
-  useEffect(() => {
-    if (isInitialLoading) return;
-
-    const runBackgroundSyncToNawah = async () => {
-      try {
-        for (const item of SYNC_MODULES) {
-          const localData = localStorage.getItem(item.key);
-          if (localData) {
-            const parsed = JSON.parse(localData);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const saveOptions = {
-                url: 'https://nawah-ai-db.vercel.app/api/engine',
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json'
-                },
-                data: {
-                  module_name: item.module,
-                  record_id: `${item.key}_records`,
-                  jsondata: parsed  
-                }
-              };
-              await CapacitorHttp.post(saveOptions);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("🚨 Cloud Save Sync Error:", err);
-      }
-    };
-
-    const initialTimer = setTimeout(runBackgroundSyncToNawah, 15000);
-    const interval = setInterval(runBackgroundSyncToNawah, 120000);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(interval);
-    };
-  }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]);
-
-  // 🎯 دالة الحذف السحابية الصامتة عند طلب مسح السجلات
-  const deleteCloudData = async (moduleName, recordId) => {
-    try {
-      const options = {
-        url: 'https://nawah-ai-db.vercel.app/api/delete-engine-data',
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        params: {
-          module_name: moduleName,
-          record_id: `${recordId}_records`
-        }
-      };
-
-      const response = await CapacitorHttp.delete(options);
-      return response.status === 200;
-    } catch (err) {
-      console.error("🚨 Cloud Delete Error:", err);
-      return false;
-    }
-  };
-
   // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
@@ -239,7 +116,7 @@ const App = () => {
     const props = { 
       onBack: () => setActivePage('dashboard'), 
       stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock,
-      setCustomers, setSuppliers, setStaff, deleteCloudData 
+      setCustomers, setSuppliers, setStaff
     };
     
     switch (activePage) {
@@ -262,7 +139,6 @@ const App = () => {
 
   return (
     <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
-      {/* 🟢 تم مسح وإلغاء شريط السجل الأزرق من هنا نهائياً لشاشة فسيحة واحترافية */}
       <main className="main-content">{renderPage()}</main>
 
       <nav className="bottom-nav">
