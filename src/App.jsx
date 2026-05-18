@@ -64,27 +64,29 @@ const App = () => {
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook, isInitialLoading]);
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('staff', JSON.stringify(staff)); }, [staff, isInitialLoading]);
 
-  // 2. 📥 محرك الجلب والتوزيع الذكي والدقيق للبيانات السحابية المتوافق مع بنية المستودع المباشرة المقروءة بنجاح
+  // 2. 📥 محرك الجلب والتوزيع الذكي - تم إضافة العملاء، الموردين، والعمالة للمزامنة السحابية
   useEffect(() => {
     const downloadDataFromNawahCloud = async () => {
       try {
-        setSyncStatus('🔄 جاري استيراد وتوطين البيانات السحابية الحية في الجداول...');
+        setSyncStatus('🔄 جاري استيراد وتوطين كتل مصفوفات ERP من السحابة...');
         
-        // ربط الـ keys السابقة بأسماء مجلدات الموديولات الفعلية داخل مستودع قاعدة البيانات السحابية
+        // 🎯 تم توسيع المصفوفة لتشمل العملاء والموردين والموظفين بشكل صريح وضخهم في الـ Setters المقابلة لهم
         const syncMap = [
           { key: 'stock', module: 'inventory_module', setter: setStock },
           { key: 'salesData', module: 'sales_module', setter: setSalesData },
           { key: 'inventory', module: 'purchases_module', setter: setInventory },
           { key: 'productionData', module: 'manufacturing_module', setter: setProductionData },
-          { key: 'expenses', module: 'dashboard_module', setter: setExpenses }
+          { key: 'expenses', module: 'dashboard_module', setter: setExpenses },
+          { key: 'customers', module: 'customers_module', setter: setCustomers },   // قسم العملاء الجديد
+          { key: 'suppliers', module: 'suppliers_module', setter: setSuppliers },   // قسم الموردين الجديد
+          { key: 'staff', module: 'staff_module', setter: setStaff }               // قسم العمالة والموظفين الجديد
         ];
 
         let importedCount = 0;
 
         for (const item of syncMap) {
           const options = {
-            // كسر حظر الكاش المؤقت على أجهزة الأندرويد لضمان ضخ مصفوفات نقية متزامنة مع المتصفح
-            url: `https://nawah-ai-db.vercel.app/api/get-engine-data?t=${new Date().getTime()}`,
+            url: `https://nawah-ai-db.vercel.app/api/engine?t=${new Date().getTime()}`, // استخدام رابط الخادم الموحد الحركي
             method: 'GET',
             headers: { 
               'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -102,21 +104,14 @@ const App = () => {
           if (response.status === 200 && response.data) {
             let cloudRecords = response.data;
             
-            // معالجة قيود Capacitor البرمجية في فك تشفير النصوص العائدة تلقائياً
             if (typeof cloudRecords === 'string') {
-              try {
-                cloudRecords = JSON.parse(cloudRecords);
-              } catch (e) {
-                console.error("🚨 خطأ فك جمود بنية الموديول: " + item.key, e);
-              }
+              try { cloudRecords = JSON.parse(cloudRecords); } catch (e) { console.error("🚨 خطأ فك جمود موديول: " + item.key, e); }
             }
 
-            // فك تغليف المصفوفات إذا تم إرسالها مدمجة داخل كائن استجابة فرعي
             if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
               cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
             }
 
-            // التثبيت الفعلي للمصفوفة في الذاكرة والـ State والواجهات البرمجية المقابلة لها
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
               item.setter(cloudRecords); 
               localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
@@ -128,10 +123,10 @@ const App = () => {
         setIsInitialLoading(false);
 
         if (importedCount > 0) {
-          setSyncStatus('✅ تم ضخ وتحديث كافة موديولات ERP بنجاح 🚀');
-          showSwal('تمت استعادة مصفوفاتك السحابية الحية بنجاح!', 'success');
+          setSyncStatus('✅ تم مزامنة وضخ كافة أقسام ومصفوفات ERP بنجاح 🚀');
+          showSwal('تم تحديث واستعادة كافة الحسابات والعملاء والموردين!', 'success');
         } else {
-          setSyncStatus('✅ السحابة مستقرة وجاهزة لتلقي العمليات الحسابية');
+          setSyncStatus('✅ قاعدة البيانات السحابية مستقرة وجاهزة للعمل كلياً');
         }
       } catch (err) {
         console.error("🚨 Cloud Download & ERP Distribution Error:", err);
@@ -143,7 +138,7 @@ const App = () => {
     downloadDataFromNawahCloud();
   }, []);
 
-  // 3. 📤 محرك المزامنة الخلفية المطور كلياً - الرفع المباشر لرابط الحفظ الجديد المستقر المعتمد
+  // 3. 📤 محرك المزامنة الخلفية المطور كلياً - رفع وحفظ العملاء، الموردين، والعمالة تلقائياً عند أي إضافة
   useEffect(() => {
     if (isInitialLoading) return;
 
@@ -152,12 +147,16 @@ const App = () => {
         let hasDataToSync = false;
         let successCount = 0;
 
+        // 🎯 إدراج الأقسام الجديدة هنا يضمن أنه بمجرد قيامك بالضغط على زر "حفظ" داخل صفحة العميل أو المورد، سيلتقط المحرك التغيير ويرفعه فوراً
         const syncMap = [
           { key: 'stock', module: 'inventory_module' },
           { key: 'salesData', module: 'sales_module' },
           { key: 'inventory', module: 'purchases_module' },
           { key: 'productionData', module: 'manufacturing_module' },
-          { key: 'expenses', module: 'dashboard_module' }
+          { key: 'expenses', module: 'dashboard_module' },
+          { key: 'customers', module: 'customers_module' },   // رفع العملاء تلقائياً
+          { key: 'suppliers', module: 'suppliers_module' },   // رفع الموردين تلقائياً
+          { key: 'staff', module: 'staff_module' }           // رفع الموظفين تلقائياً
         ];
 
         for (const item of syncMap) {
@@ -166,9 +165,8 @@ const App = () => {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
               hasDataToSync = true;
-              setSyncStatus(`جاري مزامنة وحفظ موديول ${item.key} سحابياً...`);
+              setSyncStatus(`جاري حفظ وتأمين موديول ${item.key} سحابياً...`);
               
-              // 🎯 كود الرفع والحفظ الذكي الصارم الموجه مباشرة لرابط الـ Engine الجديد المعتمد
               const saveOptions = {
                 url: 'https://nawah-ai-db.vercel.app/api/engine',
                 method: 'POST',
@@ -179,12 +177,11 @@ const App = () => {
                 data: {
                   module_name: item.module,
                   record_id: `${item.key}_records`,
-                  jsondata: parsed  // إرسال المصفوفة الحية الصافية لتحديث المستودع فوراُ
+                  jsondata: parsed  
                 }
               };
 
               const response = await CapacitorHttp.post(saveOptions);
-              
               if (response.status === 200 || response.status === 201) {
                 successCount++;
               }
@@ -195,17 +192,16 @@ const App = () => {
         if (!hasDataToSync) {
           setSyncStatus('✅ قاعدة البيانات متطابقة وثابتة محلياً وسحابياً');
         } else if (successCount > 0) {
-          setSyncStatus('✅ تم تأمين وحفظ البيانات برابط المحرك بنجاح 🔐');
+          setSyncStatus('✅ تم تأمين وحفظ كامل موديولات ERP بنجاح 🔐');
         } else {
-          setSyncStatus('⚠️ فشل التزامن المؤقت مع سيرفر الحفظ الجديد');
+          setSyncStatus('⚠️ فشل التزامن المؤقت مع سيرفر الحفظ');
         }
       } catch (err) {
         console.error("🚨 Cloud Save & ERP Sync Error:", err);
-        setSyncStatus('⚠️ خطأ اتصال بمستودع محرك الحفظ الجديد');
+        setSyncStatus('⚠️ خطأ اتصال بمستودع محرك الحفظ السحابي');
       }
     };
 
-    // ضبط مؤقتات المزامنة الدورية الخلفية الذكية لعدم تعطيل أداء الواجهات في الهاتف
     const initialTimer = setTimeout(runBackgroundSyncToNawah, 15000);
     const interval = setInterval(runBackgroundSyncToNawah, 120000);
 
@@ -213,9 +209,9 @@ const App = () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [stock, salesData, inventory, productionData, expenses, isInitialLoading]);
+  }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]); // 💡 تم إضافة خطوط المراقبة النشطة هنا لتشغيل الرفع فوراً عند تعديل مصفوفاتهم
 
-  // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة لنظام Maamoul ---
+  // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
@@ -240,9 +236,13 @@ const App = () => {
     });
   };
 
-  // --- محرك عرض وإدارة الصفحات بالشاشات والـ Props المتخصصة ---
+  // --- محرك عرض وإدارة الصفحات بالشاشات والـ Props المتخصصة وضخ الـ Setters للتحديث التلقائي ---
   const renderPage = () => {
-    const props = { onBack: () => setActivePage('dashboard'), stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock };
+    const props = { 
+      onBack: () => setActivePage('dashboard'), 
+      stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock,
+      setCustomers, setSuppliers, setStaff // ضخ الـ Setters للتأكد من قدرة الصفحات الفرعية على التعديل والحفظ المباشر
+    };
     
     switch (activePage) {
       case 'dashboard': 
@@ -267,7 +267,7 @@ const App = () => {
         return <Expenses {...props} onSave={(e) => setExpenses(prev => [...prev, e])} />;
       
       case 'Suppliers': 
-        return <Suppliers {...props} onSaveSupplier={(sup) => setSuppliers(prev => [...prev, sup])} />;
+        return <Suppliers {...props} onSaveSupplier={(sup) => setSuppliers(prev => (typeof sup === 'function' ? sup(prev) : [...prev, sup]))} />;
       
       case 'Financials': 
         return <Financials {...props} stats={financialStats} cashBook={cashBook} />;
@@ -276,7 +276,7 @@ const App = () => {
         return <Reports {...props} productionHistory={productionData} stats={financialStats} />;
       
       case 'Customers': 
-        return <Customers {...props} onSaveCustomer={(c) => setCustomers(prev => [...prev, c])} />;
+        return <Customers {...props} onSaveCustomer={(c) => setCustomers(prev => (typeof c === 'function' ? c(prev) : [...prev, c]))} />;
       
       case 'StaffManagement': 
         return <StaffManagement {...props} onUpdateStaff={(st) => setStaff(st)} />;
@@ -291,14 +291,12 @@ const App = () => {
 
   return (
     <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
-      {/* البار العلوي الذكي لمراقبة حالة الاتصال والربط السحابي لـ nawah.ai */}
       <div style={{ background: '#0f172a', color: '#0ea5e9', fontSize: '11px', padding: '6px 10px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid rgba(14, 165, 233, 0.15)' }}>
         🤖 nawah.ai Cloud Engine Status: {syncStatus}
       </div>
 
       <main className="main-content">{renderPage()}</main>
 
-      {/* البار السفلي الذكي للتنقل المباشر والسلس المناسب لاستخدام الهواتف بيد واحدة */}
       <nav className="bottom-nav">
         {[
           { id: 'dashboard', label: 'الرئيسية' },
