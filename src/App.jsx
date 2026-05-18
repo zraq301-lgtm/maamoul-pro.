@@ -73,7 +73,6 @@ const App = () => {
       try {
         setSyncStatus('🔄 جاري فحص واستيراد البيانات السحابية وضخها بالواجهة...');
         
-        // خريطة الربط الشاملة لضمان توجيه كل موديول إلى الـ State والملف الصحيح له
         const syncMap = [
           { key: 'stock', module: 'inventory', setter: setStock },
           { key: 'salesData', module: 'sales', setter: setSalesData },
@@ -86,7 +85,6 @@ const App = () => {
 
         for (const item of syncMap) {
           const options = {
-            // 🎯 التأكد من توجيه الطلب لملف الجلب الجديد والمباشر على فيرسل
             url: `https://nawah-ai-db.vercel.app/api/get-engine-data`,
             method: 'GET',
             headers: { 
@@ -104,30 +102,30 @@ const App = () => {
           if (response.status === 200 && response.data) {
             let cloudRecords = response.data;
             
-            // 🎯 حل مشكلة عدم الظهور: تحويل النص المشفر القادم من الأندرويد إلى مصفوفة حقيقية فوراً
+            // 🎯 محاكاة الاستلام المباشر القديم: 
+            // إذا قامت أداة كاباسيتور بلف البيانات داخل حقل نصي أو حقل فرعي يحمل اسم .data، نقوم باستخلاصه فوراً
             if (typeof cloudRecords === 'string') {
               try {
                 cloudRecords = JSON.parse(cloudRecords);
               } catch (e) {
-                console.error("🚨 فشل فك نص البيانات لموديول: " + item.key, e);
+                console.error("🚨 خطأ فك تجميد موديول: " + item.key, e);
               }
             }
-            
-            // إذا كانت البيانات مغلفة داخل كائن فرعي ناتجة عن التحويل نقوم بفكها
-            if (cloudRecords && !Array.isArray(cloudRecords) && typeof cloudRecords === 'object') {
-              cloudRecords = cloudRecords.payload || cloudRecords.records || cloudRecords.data || [];
+
+            // إذا كان الرد يحمل الكائن كاملاً وبداخله الحزمة الأساسية (مثلما كان يفعل رد جيت هب القديم)
+            if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
+              cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
             }
 
-            // ضخ البيانات الفعلي في شاشات الموديولات بمجرد التأكد من أنها مصفوفة صالحة
+            // الضخ المباشر إذا تحولت لمصفوفة صالحة وداخلها بيانات
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
-              item.setter(cloudRecords); // ضخ مباشر في الـ State الخاص بالصفحة
-              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); // تحديث الـ LocalStorage للحفظ الآمن
+              item.setter(cloudRecords); 
+              localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
               importedCount++;
             }
           }
         }
 
-        // إنهاء مرحلة التحميل بأمان لفتح خطوط البيع والمزامنة الخلفية الحية للبيانات الجديدة
         setIsInitialLoading(false);
 
         if (importedCount > 0) {
