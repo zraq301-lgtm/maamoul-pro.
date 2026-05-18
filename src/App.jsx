@@ -4,10 +4,7 @@ import Swal from 'sweetalert2';
 // استيراد أداة الاتصال الأصلية للهواتف الذكية من كاباسيتور
 import { CapacitorHttp } from '@capacitor/core';
 
-// استيراد دالة الاتصال الموحدة والمؤمنة بمحرك v2
-import { saveToNawahDB } from './services/db';
-
-// استيراد المكونات المتوافقة مع ملفات النظام الفعلي
+// استيراد المكونات المتوافقة مع ملفات النظام الفعلي لنظام Maamoul
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
 import Sales from './components/Sales';
@@ -41,7 +38,7 @@ const App = () => {
     } catch (e) { return initialValue; }
   };
 
-  // --- States لإدارة البيانات محلياً في الواجهة لمشروع Maamoul ---
+  // --- States لإدارة البيانات محلياً في الواجهة لمشروع Maamoul ERP ---
   const [stock, setStock] = useState(() => loadInitial('stock', []));
   const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
   const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
@@ -67,25 +64,26 @@ const App = () => {
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('cashBook', JSON.stringify(cashBook)); }, [cashBook, isInitialLoading]);
   useEffect(() => { if (!isInitialLoading) localStorage.setItem('staff', JSON.stringify(staff)); }, [staff, isInitialLoading]);
 
-  // 2. 📥 محرك الجلب والتوزيع الذكي والدقيق للبيانات السحابية العائدة من nawah.ai
+  // 2. 📥 محرك الجلب والتوزيع الذكي والدقيق للبيانات السحابية المتوافق مع بنية المستودع المباشرة المقروءة بنجاح
   useEffect(() => {
     const downloadDataFromNawahCloud = async () => {
       try {
-        setSyncStatus('🔄 جاري استيراد البيانات السحابية وضخها بالواجهة...');
+        setSyncStatus('🔄 جاري استيراد وتوطين البيانات السحابية الحية في الجداول...');
         
+        // ربط الـ keys السابقة بأسماء مجلدات الموديولات الفعلية داخل مستودع قاعدة البيانات السحابية
         const syncMap = [
-          { key: 'stock', module: 'inventory', setter: setStock },
-          { key: 'salesData', module: 'sales', setter: setSalesData },
-          { key: 'inventory', module: 'purchases', setter: setInventory },
-          { key: 'productionData', module: 'manufacturing', setter: setProductionData },
-          { key: 'expenses', module: 'dashboard', setter: setExpenses }
+          { key: 'stock', module: 'inventory_module', setter: setStock },
+          { key: 'salesData', module: 'sales_module', setter: setSalesData },
+          { key: 'inventory', module: 'purchases_module', setter: setInventory },
+          { key: 'productionData', module: 'manufacturing_module', setter: setProductionData },
+          { key: 'expenses', module: 'dashboard_module', setter: setExpenses }
         ];
 
         let importedCount = 0;
 
         for (const item of syncMap) {
           const options = {
-            // 🎯 كسر الكاش بإلحاق متغير زمني حركي تدميري لكل طلب هاتف فرعي لمنع تجمد البيانات
+            // كسر حظر الكاش المؤقت على أجهزة الأندرويد لضمان ضخ مصفوفات نقية متزامنة مع المتصفح
             url: `https://nawah-ai-db.vercel.app/api/get-engine-data?t=${new Date().getTime()}`,
             method: 'GET',
             headers: { 
@@ -104,21 +102,21 @@ const App = () => {
           if (response.status === 200 && response.data) {
             let cloudRecords = response.data;
             
-            // تحويل الرد النصي الجامد الصادر عن كاباسيتور إن وُجد إلى كائن أو مصفوفة نشطة
+            // معالجة قيود Capacitor البرمجية في فك تشفير النصوص العائدة تلقائياً
             if (typeof cloudRecords === 'string') {
               try {
                 cloudRecords = JSON.parse(cloudRecords);
               } catch (e) {
-                console.error("🚨 خطأ فك تجميد موديول: " + item.key, e);
+                console.error("🚨 خطأ فك جمود بنية الموديول: " + item.key, e);
               }
             }
 
-            // استخلاص وتعرية المصفوفة في حال تغليفها بواسطة محركات الاستجابة لضمان دقة الهيكلة الثابتة
+            // فك تغليف المصفوفات إذا تم إرسالها مدمجة داخل كائن استجابة فرعي
             if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
               cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
             }
 
-            // ضخ المصفوفة المستقرة والنقية مباشرة في الشاشات والـ State المقابل لها
+            // التثبيت الفعلي للمصفوفة في الذاكرة والـ State والواجهات البرمجية المقابلة لها
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
               item.setter(cloudRecords); 
               localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
@@ -130,13 +128,13 @@ const App = () => {
         setIsInitialLoading(false);
 
         if (importedCount > 0) {
-          setSyncStatus('✅ تم توزيع واستعادة كافة بيانات الموديولات بنجاح');
-          showSwal('تمت استعادة بياناتك السحابية وتحديث الواجهات!', 'success');
+          setSyncStatus('✅ تم ضخ وتحديث كافة موديولات ERP بنجاح 🚀');
+          showSwal('تمت استعادة مصفوفاتك السحابية الحية بنجاح!', 'success');
         } else {
-          setSyncStatus('✅ قاعدة بيانات سحابية مستقرة وجاهزة للعمل');
+          setSyncStatus('✅ السحابة مستقرة وجاهزة لتلقي العمليات الحسابية');
         }
       } catch (err) {
-        console.error("🚨 Cloud Download & Distribution Error:", err);
+        console.error("🚨 Cloud Download & ERP Distribution Error:", err);
         setIsInitialLoading(false);
         setSyncStatus('⚠️ خطأ أثناء توزيع وتوطين البيانات السحابية');
       }
@@ -145,7 +143,7 @@ const App = () => {
     downloadDataFromNawahCloud();
   }, []);
 
-  // 3. 📤 محرك المزامنة الخلفية المطور المسؤول عن رفع البيانات وتحديث السحابة دورياً
+  // 3. 📤 محرك المزامنة الخلفية المطور كلياً - الرفع المباشر لرابط الحفظ الجديد المستقر المعتمد
   useEffect(() => {
     if (isInitialLoading) return;
 
@@ -155,11 +153,11 @@ const App = () => {
         let successCount = 0;
 
         const syncMap = [
-          { key: 'stock', module: 'inventory' },
-          { key: 'salesData', module: 'sales' },
-          { key: 'inventory', module: 'purchases' },
-          { key: 'productionData', module: 'manufacturing' },
-          { key: 'expenses', module: 'dashboard' }
+          { key: 'stock', module: 'inventory_module' },
+          { key: 'salesData', module: 'sales_module' },
+          { key: 'inventory', module: 'purchases_module' },
+          { key: 'productionData', module: 'manufacturing_module' },
+          { key: 'expenses', module: 'dashboard_module' }
         ];
 
         for (const item of syncMap) {
@@ -168,26 +166,46 @@ const App = () => {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
               hasDataToSync = true;
-              setSyncStatus(`جاري تحديث السحابة لموديول ${item.key}...`);
+              setSyncStatus(`جاري مزامنة وحفظ موديول ${item.key} سحابياً...`);
               
-              const res = await saveToNawahDB(item.module, `${item.key}_records`, parsed);
-              if (res.success) successCount++;
+              // 🎯 كود الرفع والحفظ الذكي الصارم الموجه مباشرة لرابط الـ Engine الجديد المعتمد
+              const saveOptions = {
+                url: 'https://nawah-ai-db.vercel.app/api/engine',
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                data: {
+                  module_name: item.module,
+                  record_id: `${item.key}_records`,
+                  jsondata: parsed  // إرسال المصفوفة الحية الصافية لتحديث المستودع فوراُ
+                }
+              };
+
+              const response = await CapacitorHttp.post(saveOptions);
+              
+              if (response.status === 200 || response.status === 201) {
+                successCount++;
+              }
             }
           }
         }
 
         if (!hasDataToSync) {
-          setSyncStatus('✅ قاعدة البيانات السحابية متطابقة وثابتة');
+          setSyncStatus('✅ قاعدة البيانات متطابقة وثابتة محلياً وسحابياً');
         } else if (successCount > 0) {
-          setSyncStatus('✅ nawah.ai مزامنة كاملة بنجاح 🔐');
+          setSyncStatus('✅ تم تأمين وحفظ البيانات برابط المحرك بنجاح 🔐');
         } else {
-          setSyncStatus('⚠️ فشل التزامن المؤقت مع السيرفر');
+          setSyncStatus('⚠️ فشل التزامن المؤقت مع سيرفر الحفظ الجديد');
         }
       } catch (err) {
-        setSyncStatus('⚠️ خطأ اتصال بمستودع المحرك');
+        console.error("🚨 Cloud Save & ERP Sync Error:", err);
+        setSyncStatus('⚠️ خطأ اتصال بمستودع محرك الحفظ الجديد');
       }
     };
 
+    // ضبط مؤقتات المزامنة الدورية الخلفية الذكية لعدم تعطيل أداء الواجهات في الهاتف
     const initialTimer = setTimeout(runBackgroundSyncToNawah, 15000);
     const interval = setInterval(runBackgroundSyncToNawah, 120000);
 
@@ -197,7 +215,7 @@ const App = () => {
     };
   }, [stock, salesData, inventory, productionData, expenses, isInitialLoading]);
 
-  // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة ---
+  // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة لنظام Maamoul ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
@@ -222,7 +240,7 @@ const App = () => {
     });
   };
 
-  // --- محرك عرض وإدارة الصفحات بالشاشات الجديدة والـ Props المتخصصة ---
+  // --- محرك عرض وإدارة الصفحات بالشاشات والـ Props المتخصصة ---
   const renderPage = () => {
     const props = { onBack: () => setActivePage('dashboard'), stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock };
     
@@ -273,14 +291,14 @@ const App = () => {
 
   return (
     <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
-      {/* البار العلوي لحالة التزامن لمحرك nawah.ai */}
+      {/* البار العلوي الذكي لمراقبة حالة الاتصال والربط السحابي لـ nawah.ai */}
       <div style={{ background: '#0f172a', color: '#0ea5e9', fontSize: '11px', padding: '6px 10px', textAlign: 'center', fontWeight: 'bold', borderBottom: '1px solid rgba(14, 165, 233, 0.15)' }}>
         🤖 nawah.ai Cloud Engine Status: {syncStatus}
       </div>
 
       <main className="main-content">{renderPage()}</main>
 
-      {/* البار السفلي الذكي للتنقل المباشر والسلس */}
+      {/* البار السفلي الذكي للتنقل المباشر والسلس المناسب لاستخدام الهواتف بيد واحدة */}
       <nav className="bottom-nav">
         {[
           { id: 'dashboard', label: 'الرئيسية' },
