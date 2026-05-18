@@ -25,7 +25,8 @@ export default async function handler(request, response) {
     }
 
     const client = await clientPromise;
-    const db = client.db("maamoul_db");
+    // تم ضبط الاتصال ليعتمد مباشرة على متغير البيئة MONGODB_URI المرتبط بقاعدة البيانات الخاصة بك
+    const db = client.db(process.env.MONGODB_URI);
 
     // 4. محاولة الحذف الذكي (نصوص أو أرقام)
     const query = {
