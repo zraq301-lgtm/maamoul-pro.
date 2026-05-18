@@ -211,6 +211,35 @@ const App = () => {
     };
   }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]); // 💡 تم إضافة خطوط المراقبة النشطة هنا لتشغيل الرفع فوراً عند تعديل مصفوفاتهم
 
+  // 🎯 دالة الحذف السحابية المضافة حديثاً لتدمير وحذف السجلات من مستودع قاعدة البيانات مباشرة عند الطلب
+  const deleteCloudData = async (moduleName, recordId) => {
+    try {
+      setSyncStatus(`🗑️ جاري حذف السجل السحابي للموديول ${moduleName}...`);
+      const options = {
+        url: 'https://nawah-ai-db.vercel.app/api/delete-engine-data',
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        params: {
+          module_name: moduleName,
+          record_id: `${recordId}_records`
+        }
+      };
+
+      const response = await CapacitorHttp.delete(options);
+      if (response.status === 200) {
+        setSyncStatus('✅ تم مسح السجل السحابي بنجاح كلي!');
+        return true;
+      } else {
+        setSyncStatus('⚠️ فشل مسح الملف من الخادم السحابي');
+        return false;
+      }
+    } catch (err) {
+      console.error("🚨 Cloud Delete Error:", err);
+      setSyncStatus('⚠️ خطأ أثناء الاتصال بمحرك الحذف السحابي');
+      return false;
+    }
+  };
+
   // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم الشاملة ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
@@ -241,7 +270,8 @@ const App = () => {
     const props = { 
       onBack: () => setActivePage('dashboard'), 
       stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock,
-      setCustomers, setSuppliers, setStaff // ضخ الـ Setters للتأكد من قدرة الصفحات الفرعية على التعديل والحفظ المباشر
+      setCustomers, setSuppliers, setStaff,
+      deleteCloudData // 💡 ضخ دالة الحذف هنا لتكون متاحة لجميع الشاشات والمكونات الفرعية عند استدعائها
     };
     
     switch (activePage) {
