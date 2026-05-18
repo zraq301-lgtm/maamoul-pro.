@@ -40,7 +40,8 @@
     "postcss": "^8.4.35",
     "vite": "^6.0.0",
     "terser": "^5.27.0",
-    "@capacitor/cli": "^6.0.0"
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/assets": "^3.0.5"
   },
   "overrides": {
     "@capacitor/core": "^6.0.0"
