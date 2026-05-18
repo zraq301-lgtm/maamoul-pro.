@@ -29,21 +29,26 @@ jobs:
           
       - name: 4. Build Web Project
         env:
-          # 🌟 سحب التوكن من أسرار المستودع وحقنه داخل الـ Vite ليعمل أوتوماتيكياً في الـ APK
           VITE_GITHUB_TOKEN: ${{ secrets.VITE_GITHUB_TOKEN }}
         run: |
           npm install --legacy-peer-deps
           npm run build
-          # ضمان وجود المجلد المطلوب
           mkdir -p www
           cp -r dist/* www/ || echo "Using existing files"
 
-      - name: 5. Force Create Android Project
+      - name: 5. Force Create Android Project & Generate Assets
         run: |
-          # تنظيف وحذف أي بقايا قديمة
+          # تنظيف وحذف أي بقايا قديمة للمجلد
           rm -rf android
-          # إضافة المنصة وبناء المجلد من الصفر
+          
+          # إضافة منصة أندرويد وبنائها من الصفر
           npx cap add android
+          
+          # توليد الأيقونات والشاشات تلقائياً من المسار المطلوب قبل الـ sync
+          if [ -f "resources/ico-foreground.png" ]; then
+            npx @capacitor/assets generate --android --icon-path resources/ico-foreground.png
+          fi
+          
           npx cap sync android
 
       - name: 6. Inject Identity & Firebase
@@ -66,27 +71,40 @@ jobs:
             sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">nawh.ai<\/string>/' $STRINGS
           fi
 
-      - name: 7. Native Android Compilation
+      - name: 7. Native Android Compilation (APK & AAB)
         working-directory: ./android
         run: |
           chmod +x gradlew
           # إصلاح تعارض مكتبة bcprov
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
-          # البناء مع رفع كفاءة الذاكرة لتجنب الانهيار الصامت
-          ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m"
+          
+          # بناء الـ APK والـ AAB معاً مع رفع كفاءة الذاكرة لتجنب الانهيار
+          ./gradlew assembleRelease bundleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m"
 
-      - name: 8. Sign APK
+      - name: 8. Sign Production Binaries (APK & AAB)
         run: |
+          # إنشاء ملف المفتاح لـ التوقيع الرقمي
           keytool -genkey -v -keystore nawh.jks -alias nawh_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" -dname "CN=NawhApp, O=Nawh, C=EG" -noprompt
+          
+          # جلب مسارات الملفات المستخرجة
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawh.jks --ks-pass pass:"nawh_pass_2026" --out Nawh-Final.apk "$APK_PATH"
+          
+          # 1. توقيع ملف الـ APK مع تعديل وتأكيد رقم التوقيع (Min SDK v301) 
+          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawh.jks --ks-pass pass:"nawh_pass_2026" --min-sdk-version 301 --out Nawh-Final.apk "$APK_PATH"
+          
+          # 2. توقيع ملف الـ AAB المخصص لمتجر جوجل بلاي باستخدام jarsigner
+          jarsigner -keystore nawh.jks -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" "$AAB_PATH" nawh_alias
+          cp "$AAB_PATH" Nawh-Final.aab
 
-      - name: 9. Release to GitHub
+      - name: 9. Release Binaries to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.5.${{ github.run_number }}
           name: "Nawh Stable Build v1.5.${{ github.run_number }}"
-          files: Nawh-Final.apk
+          files: |
+            Nawh-Final.apk
+            Nawh-Final.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
