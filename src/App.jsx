@@ -71,7 +71,7 @@ const App = () => {
   useEffect(() => {
     const downloadDataFromNawahCloud = async () => {
       try {
-        setSyncStatus('🔄 جاري فحص واستيراد البيانات السحابية وضخها بالواجهة...');
+        setSyncStatus('🔄 جاري استيراد البيانات السحابية وضخها بالواجهة...');
         
         const syncMap = [
           { key: 'stock', module: 'inventory', setter: setStock },
@@ -85,10 +85,12 @@ const App = () => {
 
         for (const item of syncMap) {
           const options = {
-            url: `https://nawah-ai-db.vercel.app/api/get-engine-data`,
+            // 🎯 كسر الكاش بإلحاق متغير زمني حركي تدميري لكل طلب هاتف فرعي لمنع تجمد البيانات
+            url: `https://nawah-ai-db.vercel.app/api/get-engine-data?t=${new Date().getTime()}`,
             method: 'GET',
             headers: { 
-              'Cache-Control': 'no-cache',
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
               'Accept': 'application/json'
             },
             params: {
@@ -102,8 +104,7 @@ const App = () => {
           if (response.status === 200 && response.data) {
             let cloudRecords = response.data;
             
-            // 🎯 محاكاة الاستلام المباشر القديم: 
-            // إذا قامت أداة كاباسيتور بلف البيانات داخل حقل نصي أو حقل فرعي يحمل اسم .data، نقوم باستخلاصه فوراً
+            // تحويل الرد النصي الجامد الصادر عن كاباسيتور إن وُجد إلى كائن أو مصفوفة نشطة
             if (typeof cloudRecords === 'string') {
               try {
                 cloudRecords = JSON.parse(cloudRecords);
@@ -112,12 +113,12 @@ const App = () => {
               }
             }
 
-            // إذا كان الرد يحمل الكائن كاملاً وبداخله الحزمة الأساسية (مثلما كان يفعل رد جيت هب القديم)
+            // استخلاص وتعرية المصفوفة في حال تغليفها بواسطة محركات الاستجابة لضمان دقة الهيكلة الثابتة
             if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
               cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
             }
 
-            // الضخ المباشر إذا تحولت لمصفوفة صالحة وداخلها بيانات
+            // ضخ المصفوفة المستقرة والنقية مباشرة في الشاشات والـ State المقابل لها
             if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
               item.setter(cloudRecords); 
               localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
