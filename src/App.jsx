@@ -4,6 +4,9 @@ import Swal from 'sweetalert2';
 // استيراد الروابط والمحرك الموحد من المسار المطلوب
 import apiService, { apiEndpoints } from './services/db';
 
+// استيراد دالة تشغيل الاتصال الخارجي من المسار المطلوب
+import { executeExternalConnection } from './services/db';
+
 // استيراد المكونات المتوافقة مع ملفات النظام الفعلي لنظام Maamoul
 import Dashboard from './components/Dashboard';
 import PurchasesManager from './components/PurchasesManager';
