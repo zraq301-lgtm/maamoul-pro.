@@ -17,7 +17,7 @@
 
 body {
   font-family: 'Tajawal', sans-serif;
-  background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+  background: #000000;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -30,7 +30,7 @@ body {
 /* App Container */
 .app-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
+  background: #000000;
   padding-bottom: 100px;
   font-family: 'Tajawal', sans-serif;
   font-size: 18px;
@@ -130,7 +130,7 @@ body {
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justifyContent: 'center';
   gap: 10px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
