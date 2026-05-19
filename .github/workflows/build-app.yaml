@@ -70,9 +70,15 @@ jobs:
         run: |
           # تثبيت أداة Capacitor Assets لتوليد الأيقونات
           npm install @capacitor/assets --save-dev
-          # التأكد من وجود ملف الأيقونة في المسار المحدد أو استخدامها لتوليد المقاسات للأندرويد
-          # ستقوم الأداة بالبحث عن المجلد وحقن الأيقونات داخل مشروع الأندرويد مباشرة
-          npx capacitor-assets generate --android --icon-foreground-png resources/icon-foreground.png
+          
+          # إنشاء مجلد الـ assets الافتراضي الذي تتوقعه الأداة في جذر المشروع
+          mkdir -p assets
+          
+          # نسخ أيقونتك الخاصة من مسارها وتغيير اسمها إلى الاسم الافتراضي المدعوم (icon.png)
+          cp resources/icon-foreground.png assets/icon.png
+          
+          # توليد كافة مقاسات الأيقونات لمجلد الأندرويد تلقائياً وبدون خيارات غير معروفة
+          npx capacitor-assets generate --android
 
       - name: 7. Native Android Compilation (APK & AAB)
         working-directory: ./android
