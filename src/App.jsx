@@ -75,7 +75,7 @@ const App = () => {
     waitingList: setSupplierWaitingList, cashBook: setCashBook, staff: setStaff
   }), []);
 
-  // 1. إدارة الحفظ المحلي التلقائي والذكي بملف واحد متكامل لمنع تكرار الأسطر لكل موديول
+  // 1. إدارة الحفظ المحلي التلقائي والذكي بملف واحد متكامل
   useEffect(() => {
     if (isInitialLoading) return;
     SYNC_MODULES.forEach(item => {
@@ -93,15 +93,14 @@ const App = () => {
     localStorage.setItem('waste', JSON.stringify(waste));
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff, isInitialLoading]);
 
-  // 2. 📥 محرك جلب البيانات السحابي المحدث لحل مشكلة 400 تماماً
+  // 2. 📥 محرك جلب البيانات السحابي (GET)
   useEffect(() => {
     const downloadDataFromMaamoulCloud = async () => {
       try {
         let importedCount = 0;
 
         for (const item of SYNC_MODULES) {
-          // دمج المتغيرات في الرابط مباشرة لضمان قراءتها في Vercel بنسبة 100%
-          const cloudUrl = `https://maamoul-pro-five.vercel.app/api/get-data?module_name=${item.module}&record_id=${item.key}_records&t=${new Date().getTime()}`;
+          const cloudUrl = `https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${item.module}&t=${new Date().getTime()}`;
 
           const options = {
             url: cloudUrl,
@@ -122,6 +121,7 @@ const App = () => {
               try { cloudRecords = JSON.parse(cloudRecords); } catch (e) { console.error("🚨 خطأ موديول: " + item.key, e); }
             }
 
+            // إذا كانت المخرجات مغلفة بداخل كائن نجاح المونجو التقليدي
             if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
               cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
             }
@@ -149,7 +149,7 @@ const App = () => {
     downloadDataFromMaamoulCloud();
   }, [setters]);
 
-  // 3. 📤 محرك المزامنة الخلفية التلقائي لحفظ السجلات (sync)
+  // 3. 📤 محرك المزامنة الخلفية التلقائي لحفظ السجلات (تم تعديله ليطابق الكود الناجح)
   useEffect(() => {
     if (isInitialLoading) return;
 
@@ -160,19 +160,20 @@ const App = () => {
           if (localData) {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
+              
               const saveOptions = {
                 url: 'https://maamoul-pro-five.vercel.app/api/sync',
                 method: 'POST',
                 headers: { 
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json'
+                  'Content-Type': 'application/json'
                 },
+                // هنا التغيير الجوهري: إرسال الحقول كـ collectionName و data تماماً كالمشروع الآخر الفعال
                 data: {
-                  module_name: item.module,
-                  record_id: `${item.key}_records`,
-                  jsondata: parsed  
+                  collectionName: item.module,
+                  data: parsed  
                 }
               };
+              
               await CapacitorHttp.post(saveOptions);
             }
           }
@@ -191,18 +192,17 @@ const App = () => {
     };
   }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]);
 
-  // 🎯 دالة الحذف السحابية المعدلة لتجنب خطأ 400
-  const deleteCloudData = async (moduleName, recordId) => {
+  // 🎯 دالة الحذف السحابية
+  const deleteCloudData = async (moduleName, id) => {
     try {
-      const deleteUrl = `https://maamoul-pro-five.vercel.app/api/delete-item?module_name=${moduleName}&record_id=${recordId}_records`;
-
       const options = {
-        url: deleteUrl,
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' }
+        url: 'https://maamoul-pro-five.vercel.app/api/delete-item',
+        method: 'POST', // أو DELETE بحسب إعداد السيرفر لديك بالمشروع الآخر
+        headers: { 'Content-Type': 'application/json' },
+        data: { collectionName: moduleName, id }
       };
 
-      const response = await CapacitorHttp.delete(options);
+      const response = await CapacitorHttp.post(options);
       return response.status === 200;
     } catch (err) {
       console.error("🚨 Cloud Delete Error:", err);
@@ -210,7 +210,7 @@ const App = () => {
     }
   };
 
-  // 🤖 دالة معالجة وتحليل الأداء والتقارير عبر محرك الذكاء الاصطناعي (raqqa-ai)
+  // 🤖 دالة معالجة وتحليل الأداء والتقارير عبر محرك الذكاء الاصطناعي
   const analyzeSystemPerformanceWithAI = async (analysisPrompt) => {
     try {
       const options = {
