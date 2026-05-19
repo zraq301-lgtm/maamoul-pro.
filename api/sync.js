@@ -1,18 +1,4 @@
-import { MongoClient } from "mongodb";
-
-const uri = process.env.MONGODB_URI;
-let client;
-let clientPromise;
-
-if (!uri) {
-    throw new Error("الرجاء إضافة MONGODB_URI إلى إعدادات البيئة");
-}
-
-if (!global._mongoClientPromise) {
-    client = new MongoClient(uri);
-    global._mongoClientPromise = client.connect();
-}
-clientPromise = global._mongoClientPromise;
+import clientPromise from "../lib/mongodb.js";
 
 export default async function handler(request, response) {
     response.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,31 +11,53 @@ export default async function handler(request, response) {
     try {
         const client = await clientPromise;
         const db = client.db("maamoul_db");
-        const { collectionName, data } = request.body;
-
-        if (!collectionName || data === undefined || data === null) {
-            return response.status(400).json({ error: 'بيانات ناقصة' });
+        
+        // 🛠️ تأمين قراءة الـ Body: تحويل النص إلى Object إذا أرسله Capacitor كـ String
+        let bodyData = request.body;
+        if (typeof bodyData === 'string') {
+            try {
+                bodyData = JSON.parse(bodyData);
+            } catch (jsonError) {
+                return response.status(400).json({ 
+                    error: 'فشل تفكيك نص البيانات الممرر من الموبايل', 
+                    details: jsonError.message 
+                });
+            }
         }
 
-        // --- التعديل الجوهري لضمان عدم اختفاء البيانات ---
+        // استخراج المتغيرات بعد التأكد من نوعية الـ body
+        const { collectionName, module_name, data, jsondata } = bodyData || {};
         
-        // إذا كانت البيانات مصفوفة
-        if (Array.isArray(data)) {
-            if (data.length === 0) return response.status(200).json({ success: true, message: 'مصفوفة فارغة' });
+        const targetCollection = module_name || collectionName;
+        const targetData = jsondata || data;
 
-            const operations = data.map(item => {
-                // نستخدم id المنتج أو نولد واحد جديد فوراً لضمان عدم التداخل
-                const uniqueId = item.id || Date.now() + Math.random().toString(36).substr(2, 9);
+        // التحقق الذكي من وجود البيانات الأساسية
+        if (!targetCollection || targetData === undefined || targetData === null) {
+            return response.status(400).json({ 
+                error: 'بيانات ناقصة، يرجى التأكد من إرسال اسم القسم والبيانات بشكل صحيح',
+                received: { targetCollection, hasData: !!targetData }
+            });
+        }
+
+        if (Array.isArray(targetData)) {
+            // إذا كانت مصفوفة فارغة
+            if (targetData.length === 0) {
+                return response.status(200).json({ 
+                    success: true, 
+                    message: 'لا توجد بيانات للمزامنة (المصفوفة فارغة)',
+                    result: { matchedCount: 0, upsertedCount: 0 } 
+                });
+            }
+
+            const operations = targetData.map(item => {
                 const { _id, ...cleanData } = item; 
                 
                 return {
                     updateOne: {
-                        // الفلترة بالـ id لضمان عدم التكرار، والـ upsert للإضافة إذا لم يوجد
-                        filter: { id: uniqueId }, 
+                        filter: { id: item.id }, 
                         update: { 
                             $set: { 
                                 ...cleanData, 
-                                id: uniqueId, // نؤكد وجود الـ id
                                 updatedAt: new Date() 
                             } 
                         },
@@ -58,17 +66,17 @@ export default async function handler(request, response) {
                 };
             });
 
-            const result = await db.collection(collectionName).bulkWrite(operations);
+            // الحفظ المجمع
+            const result = await db.collection(targetCollection).bulkWrite(operations);
             return response.status(200).json({ success: true, result });
 
         } else {
-            // إذا كان كائناً واحداً (عملية إنتاج واحدة)
-            const uniqueId = data.id || Date.now() + Math.random().toString(36).substr(2, 9);
-            const { _id, ...cleanData } = data;
+            // التعامل مع عنصر واحد (Object)
+            const { _id, ...cleanData } = targetData;
             
-            const result = await db.collection(collectionName).updateOne(
-                { id: uniqueId },
-                { $set: { ...cleanData, id: uniqueId, updatedAt: new Date() } },
+            const result = await db.collection(targetCollection).updateOne(
+                { id: targetData.id },
+                { $set: { ...cleanData, updatedAt: new Date() } },
                 { upsert: true }
             );
             return response.status(200).json({ success: true, result });
@@ -76,6 +84,6 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('Database Sync Error:', error);
-        return response.status(500).json({ error: error.message });
+        return response.status(500).json({ error: 'حدث خطأ داخلي أثناء حفظ البيانات', details: error.message });
     }
 }
