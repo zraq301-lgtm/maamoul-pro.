@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { Truck, UserPlus, Phone, Save, ArrowRight, DollarSign, AlertCircle } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-// 🎯 تم تعديل الـ Props لاستقبال onSaveSupplier ليتطابق 100% مع مخرجات App.jsx
 const Suppliers = ({ onBack, onSaveSupplier, suppliers = [], waitingList = [], onPayDebt, onUpdateWaitingList }) => {
   const [newSupplier, setNewSupplier] = useState({ name: '', phone: '', address: '', material: 'دقيق', debt: 0 });
   const [payAmount, setPayAmount] = useState({});
   const [showAdd, setShowAdd] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // مؤشر لانتظار عملية المعالجة
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!newSupplier.name || !newSupplier.phone) { 
       Swal.fire({
@@ -20,22 +20,50 @@ const Suppliers = ({ onBack, onSaveSupplier, suppliers = [], waitingList = [], o
       return; 
     }
     
-    // 🔥 استدعاء دالة التحديث والحفظ السحابي الصحيحة الممررة من النظام
-    onSaveSupplier({ ...newSupplier, id: Date.now(), debt: parseFloat(newSupplier.debt) || 0 });
+    setIsSaving(true);
     
-    // إعادة تعيين النموذج وإغلاقه
-    setNewSupplier({ name: '', phone: '', address: '', material: 'دقيق', debt: 0 });
-    setShowAdd(false);
-    
-    Swal.fire({
-      title: 'تم حفظ المورد',
-      text: 'تم تسجيل بيانات المورد وتأمينها سحابياً بنجاح 🚀',
-      icon: 'success',
-      timer: 1800,
-      showConfirmButton: false,
-      position: 'center',
-      toast: true
-    });
+    // 🎯 1. هيكلة وتجهيز البيانات بالمعرفات والأرقام الصحيحة المتوافقة مع السيرفر السحابي
+    const supplierId = Date.now().toString();
+    const supplierPayload = { 
+      id: supplierId,
+      record_id: `sup_${supplierId}`, // لتسهيل الفهرسة السحابية إذا كان الـ App.jsx يحتاجها
+      name: newSupplier.name.trim(),
+      phone: newSupplier.phone.trim(),
+      address: newSupplier.address ? newSupplier.address.trim() : '',
+      material: newSupplier.material, 
+      debt: parseFloat(newSupplier.debt) || 0 
+    };
+
+    try {
+      // 🚀 2. استدعاء الدالة الأب الممررة من App.jsx مباشرة والانتظار حتى تمام الرفع سحابياً
+      if (onSaveSupplier) {
+        await onSaveSupplier(supplierPayload);
+      }
+      
+      // 3. إعادة تعيين واجهة النموذج بعد التأكد من نجاح العملية السحابية بالـ App
+      setNewSupplier({ name: '', phone: '', address: '', material: 'دقيق', debt: 0 });
+      setShowAdd(false);
+      
+      Swal.fire({
+        title: 'تم الحفظ',
+        text: 'تم تمرير البيانات وحفظها بنجاح عبر نظام الروابط السحابية 🚀',
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false,
+        position: 'center',
+        toast: true
+      });
+    } catch (error) {
+      console.error("🚨 Error process supplier save:", error);
+      Swal.fire({
+        title: 'فشل الحفظ',
+        text: 'حدث خطأ أثناء محاولة حفظ البيانات، يرجى التحقق من الاتصال.',
+        icon: 'error',
+        confirmButtonText: 'موافق'
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handlePayDebt = (supplierName) => {
@@ -45,7 +73,7 @@ const Suppliers = ({ onBack, onSaveSupplier, suppliers = [], waitingList = [], o
       return; 
     }
     
-    onPayDebt(supplierName, amount);
+    if (onPayDebt) onPayDebt(supplierName, amount);
     setPayAmount(prev => ({ ...prev, [supplierName]: '' }));
     
     Swal.fire({
@@ -87,18 +115,20 @@ const Suppliers = ({ onBack, onSaveSupplier, suppliers = [], waitingList = [], o
           <h3 style={{ marginTop: 0, fontSize: '1.1rem', marginBottom: '15px', color: '#1e293b' }}>بيانات المورد الجديد</h3>
           <form onSubmit={handleSubmit}>
             <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}>اسم المورد / الشركة</label>
-            <input className="glass-input" placeholder="مثال: شركة الأمل للدقيق" value={newSupplier.name} onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })} style={{ marginBottom: '12px', width: '100%' }} />
+            <input className="glass-input" placeholder="مثال: شركة الأمل للدقيق" value={newSupplier.name} onChange={(e) => setNewSupplier({ ...newSupplier, name: e.target.value })} style={{ marginBottom: '12px', width: '100%' }} disabled={isSaving} />
             
             <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><Phone size={14} /> رقم التواصل</label>
-            <input className="glass-input" placeholder="01xxxxxxxxx" value={newSupplier.phone} onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })} style={{ marginBottom: '12px', width: '100%' }} />
+            <input className="glass-input" placeholder="01xxxxxxxxx" value={newSupplier.phone} onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })} style={{ marginBottom: '12px', width: '100%' }} disabled={isSaving} />
             
             <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}>المادة الموردة</label>
-            <select className="glass-input" value={newSupplier.material} onChange={(e) => setNewSupplier({ ...newSupplier, material: e.target.value })} style={{ marginBottom: '12px', width: '100%' }}><option value="دقيق">دقيق</option><option value="سمن">سمن</option><option value="عجوة">عجوة</option><option value="تغليف">كراتين وتغليف</option><option value="سكر">سكر</option><option value="أخرى">أخرى</option></select>
+            <select className="glass-input" value={newSupplier.material} onChange={(e) => setNewSupplier({ ...newSupplier, material: e.target.value })} style={{ marginBottom: '12px', width: '100%' }} disabled={isSaving}><option value="دقيق">دقيق</option><option value="سمن">سمن</option><option value="عجوة">عجوة</option><option value="تغليف">كراتين وتغليف</option><option value="سكر">سكر</option><option value="أخرى">أخرى</option></select>
             
             <label className="form-label" style={{ fontWeight: '600', display: 'block', marginBottom: '5px' }}><DollarSign size={14} /> المديونية السابقة</label>
-            <input type="number" className="glass-input" placeholder="0" value={newSupplier.debt} onChange={(e) => setNewSupplier({ ...newSupplier, debt: e.target.value })} style={{ marginBottom: '20px', width: '100%' }} />
+            <input type="number" className="glass-input" placeholder="0" value={newSupplier.debt} onChange={(e) => setNewSupplier({ ...newSupplier, debt: e.target.value })} style={{ marginBottom: '20px', width: '100%' }} disabled={isSaving} />
             
-            <button type="submit" className="btn-primary" style={{ backgroundColor: '#34495e', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}><Save size={18} /> حفظ المورد</button>
+            <button type="submit" className="btn-primary" style={{ backgroundColor: '#34495e', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }} disabled={isSaving}>
+              <Save size={18} /> {isSaving ? 'جاري الحفظ والمزامنة السحابية...' : 'حفظ وتأمين البيانات'}
+            </button>
           </form>
         </div>
       )}
