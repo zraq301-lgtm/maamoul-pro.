@@ -93,24 +93,23 @@ const App = () => {
     localStorage.setItem('waste', JSON.stringify(waste));
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff, isInitialLoading]);
 
-  // 2. 📥 محرك جلب البيانات السحابي عند إقلاع التطبيق (get-data)
+  // 2. 📥 محرك جلب البيانات السحابي المحدث لحل مشكلة 400 تماماً
   useEffect(() => {
     const downloadDataFromMaamoulCloud = async () => {
       try {
         let importedCount = 0;
 
         for (const item of SYNC_MODULES) {
+          // دمج المتغيرات في الرابط مباشرة لضمان قراءتها في Vercel بنسبة 100%
+          const cloudUrl = `https://maamoul-pro-five.vercel.app/api/get-data?module_name=${item.module}&record_id=${item.key}_records&t=${new Date().getTime()}`;
+
           const options = {
-            url: `https://maamoul-pro-five.vercel.app/api/get-data?t=${new Date().getTime()}`,
+            url: cloudUrl,
             method: 'GET',
             headers: { 
               'Cache-Control': 'no-cache, no-store, must-revalidate',
               'Pragma': 'no-cache',
               'Accept': 'application/json'
-            },
-            params: {
-              module_name: item.module,
-              record_id: `${item.key}_records`
             }
           };
 
@@ -192,17 +191,15 @@ const App = () => {
     };
   }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]);
 
-  // 🎯 دالة الحذف السحابية الصامتة المعتمدة على CapacitorHttp لحذف السجلات (delete-item)
+  // 🎯 دالة الحذف السحابية المعدلة لتجنب خطأ 400
   const deleteCloudData = async (moduleName, recordId) => {
     try {
+      const deleteUrl = `https://maamoul-pro-five.vercel.app/api/delete-item?module_name=${moduleName}&record_id=${recordId}_records`;
+
       const options = {
-        url: 'https://maamoul-pro-five.vercel.app/api/delete-item',
+        url: deleteUrl,
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        params: {
-          module_name: moduleName,
-          record_id: `${recordId}_records`
-        }
+        headers: { 'Content-Type': 'application/json' }
       };
 
       const response = await CapacitorHttp.delete(options);
