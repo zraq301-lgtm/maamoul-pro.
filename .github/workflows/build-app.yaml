@@ -44,9 +44,10 @@ jobs:
           # إضافة منصة أندرويد وبنائها من الصفر
           npx cap add android
           
-          # توليد الأيقونات والشاشات عبر الأداة المحلية بالإشارة للمسار المحدد بدقة
+          # توليد الأيقونات بشكل صحيح تماماً متوافق مع الحزمة
+          # ملحوظة: الأداة تأخذ المدخلات تلقائياً وتولد المقاسات بدون خيارات مجهولة
           if [ -f "resources/ico-foreground.png" ]; then
-            npx capacitor-assets generate --android --icon-path resources/ico-foreground.png
+            npx capacitor-assets generate --android
           fi
           
           # مزامنة المشروع بعد تحديث الأيقونات
