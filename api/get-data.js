@@ -17,21 +17,23 @@ export default async function handler(request, response) {
         const client = await clientPromise;
         const db = client.db("maamoul_db");
 
-        // استخراج اسم المجموعة من الرابط
-        const { collectionName } = request.query;
+        // استخراج المتغيرات القادمة من تطبيق Maamoul
+        // ندعم collectionName أو module_name كاسم للمجموعة لضمان التوافق التام
+        const { collectionName, module_name } = request.query;
+        const targetCollection = module_name || collectionName;
 
-        if (!collectionName) {
-            return response.status(400).json({ error: 'يجب تحديد اسم القسم المراد جلبه' });
+        if (!targetCollection) {
+            return response.status(400).json({ 
+                error: 'يجب تحديد اسم القسم المراد جلبه',
+                hint: 'تأكد من إرسال parameter باسم module_name أو collectionName' 
+            });
         }
 
-        // جلب البيانات
-        const data = await db.collection(collectionName).find({}).toArray();
+        // جلب البيانات من المجموعة المطلوبة
+        const data = await db.collection(targetCollection).find({}).toArray();
 
-        return response.status(200).json({
-            success: true,
-            count: data.length,
-            data: data
-        });
+        // إرجاع البيانات بالشكل المتوافق مع محرك الجلب في الـ App
+        return response.status(200).json(data);
 
     } catch (error) {
         console.error('Fetch Error:', error);
