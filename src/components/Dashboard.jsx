@@ -5,11 +5,17 @@ import {
   ShoppingCart, Tag, Factory, Warehouse, Trash2,
   Wallet, Truck, BarChart3, FileText, Users,
   TrendingUp, TrendingDown, DollarSign, Package, Settings, UserCheck,
-  ClipboardList, Activity, BarChart, Cpu, Sparkles, Calendar
+  ClipboardList, Activity, BarChart, Cpu, Sparkles
 } from 'lucide-react';
 
-// 🔄 التعديل الأول: استقبال مصفوفات البيانات التفصيلية من المكون الأب
-const Dashboard = ({ setActivePage, stats, staffCount, customersData = [], suppliersData = [], staffData = [] }) => {
+const Dashboard = ({ 
+  setActivePage, 
+  stats, 
+  staffCount, 
+  customersData = [], 
+  suppliersData = [], 
+  staffData = [] 
+}) => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiInsight, setAiInsight] = useState('');
 
@@ -57,15 +63,14 @@ const Dashboard = ({ setActivePage, stats, staffCount, customersData = [], suppl
         data: {
           module_name: 'ai_analytics_engine',
           record_id: 'dashboard_snapshot',
-          // 🔄 التعديل الثاني: تضمين كافة بيانات العملاء والموردين والعمالة في حزمة الإرسال السحابية لضمان وصولها للأب/السيرفر
           jsondata: {
             timestamp: new Date().getTime(),
             current_stats: s,
             staff_count: staffCount || staffData.length,
             yearly_trend: yearlyAnalytics,
-            customers_list: customersData,  // تمرير مدخلات العملاء
-            suppliers_list: suppliersData,  // تمرير مدخلات الموردين
-            staff_details: staffData        // تمرير المدخلات التفصيلية للعمالة
+            customers_list: customersData,
+            suppliers_list: suppliersData,
+            staff_details: staffData
           }
         }
       };
