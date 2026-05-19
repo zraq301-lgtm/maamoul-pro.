@@ -70,32 +70,53 @@ const DataGrid = ({ columns, data, onCellEdit, onBulkDelete, exportFileName, edi
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {selectedRows.length > 0 && onBulkDelete && (
             <button
               onClick={handleBulkDelete}
               style={{
-                padding: '8px 14px', borderRadius: '12px', border: '1px solid rgba(239, 68, 68, 0.3)',
-                background: 'rgba(254, 242, 242, 0.9)', color: '#ef4444', fontWeight: 'bold',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem',
-                fontFamily: "'Tajawal', sans-serif"
+                padding: '8px 14px', 
+                borderRadius: '12px', 
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                background: 'rgba(239, 68, 68, 0.15)', /* خلفية حمراء زجاجية داكنة */
+                color: '#f87171', /* لون أحمر فاتح ومضيء يناسب الخلفية السوداء */
+                fontWeight: 'bold',
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '6px', 
+                fontSize: '0.85rem',
+                fontFamily: "'Tajawal', sans-serif",
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.1)',
+                transition: 'all 0.2s ease'
               }}
             >
-              <Trash2 size={14} /> حذف ({selectedRows.length})
+              <Trash2 size={15} /> حذف ({selectedRows.length})
             </button>
           )}
-          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{data.length} صف</span>
+          {/* تم تعديل لون نص عدد الصفوف ليصبح واضحاً */}
+          <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '500' }}>{data.length} صف</span>
         </div>
         <button
           onClick={handleExportCSV}
           style={{
-            padding: '8px 14px', borderRadius: '12px', border: 'none',
-            background: '#1e5631', color: 'white', fontWeight: 'bold',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem',
-            fontFamily: "'Tajawal', sans-serif", boxShadow: '0 4px 12px rgba(30, 86, 49, 0.2)'
+            padding: '8px 14px', 
+            borderRadius: '12px', 
+            border: 'none',
+            background: '#166534', /* لون أخضر حيوي غامق ومناسب */
+            color: 'white', 
+            fontWeight: 'bold',
+            cursor: 'pointer', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px', 
+            fontSize: '0.85rem',
+            fontFamily: "'Tajawal', sans-serif", 
+            boxShadow: '0 4px 14px rgba(22, 101, 52, 0.4)', /* توهج أخضر خفيف */
+            transition: 'all 0.2s ease'
           }}
         >
-          <Download size={14} /> تصدير Excel
+          <Download size={15} /> تصدير Excel
         </button>
       </div>
 
@@ -120,7 +141,7 @@ const DataGrid = ({ columns, data, onCellEdit, onBulkDelete, exportFileName, edi
           <tbody>
             {data.length === 0 ? (
               <tr>
-                <td colSpan={columns.length + (onBulkDelete ? 1 : 0)} style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                <td colSpan={columns.length + (onBulkDelete ? 1 : 0)} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                   لا توجد بيانات
                 </td>
               </tr>
@@ -169,7 +190,7 @@ const DataGrid = ({ columns, data, onCellEdit, onBulkDelete, exportFileName, edi
       </div>
 
       {editable && (
-        <p style={{ fontSize: '0.75rem', color: '#94a3b8', textAlign: 'center', marginTop: '8px' }}>
+        <p style={{ fontSize: '0.75rem', color: '#64748b', textAlign: 'center', marginTop: '12px' }}>
           انقر مرتين على أي خلية للتعديل | Enter للحفظ | Escape للإلغاء
         </p>
       )}
