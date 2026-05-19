@@ -138,33 +138,44 @@ const App = () => {
     downloadDataFromMaamoulCloud();
   }, [downloadDataFromMaamoulCloud]);
 
-  // 2. 📤 محرك المزامنة الخلفية التلقائي والذكي (حفظ السجلات بشكل دوري آمن)
+  // 2. 📤 محرك المزامنة الخلفية التلقائي والذكي المعدّل (تم إصلاح الخلل بالربط المباشر مع الحالات الحيّة)
   useEffect(() => {
     if (isInitialLoading) return; // حماية صارمة: لا ترفع للسيرفر أي شيء طالما جاري التحميل الابتدائي
 
     const runBackgroundSyncToMaamoul = async () => {
       setIsSyncing(true);
       try {
+        // خريطة حية لقراءة البيانات مباشرة من الـ React States فور تحديثها
+        const liveDataMap = {
+          stock,
+          salesData,
+          inventory,
+          productionData,
+          expenses,
+          customers,
+          suppliers,
+          staff
+        };
+
         for (const item of SYNC_MODULES) {
-          const localData = localStorage.getItem(item.key);
-          if (localData) {
-            const parsed = JSON.parse(localData);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const saveOptions = {
-                url: 'https://maamoul-pro-five.vercel.app/api/sync',
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json'
-                },
-                data: {
-                  module_name: item.module,
-                  record_id: `${item.key}_records`,
-                  jsondata: parsed  
-                }
-              };
-              await CapacitorHttp.post(saveOptions);
-            }
+          const currentLiveData = liveDataMap[item.key];
+          
+          // المزامنة تعتمد الآن على البيانات الحيّة الفورية في الذاكرة لتفادي تأخر الـ localStorage
+          if (Array.isArray(currentLiveData) && currentLiveData.length > 0) {
+            const saveOptions = {
+              url: 'https://maamoul-pro-five.vercel.app/api/sync',
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              data: {
+                module_name: item.module,
+                record_id: `${item.key}_records`,
+                jsondata: currentLiveData  
+              }
+            };
+            await CapacitorHttp.post(saveOptions);
           }
         }
       } catch (err) {
@@ -174,9 +185,9 @@ const App = () => {
       }
     };
 
-    // مزامنة دورية محسنة ومجدولة كل دقيقتين مع تشغيل أولي سريع بعد 15 ثانية
-    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 15000);
-    const interval = setInterval(runBackgroundSyncToMaamoul, 120000);
+    // مزامنة دورية مع تشغيل أولي سريع جداً بعد 3 ثوانٍ فقط من الإضافة بدلاً من 15 ثانية لضمان الفورية
+    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 3000);
+    const interval = setInterval(runBackgroundSyncToMaamoul, 60000); // تحديث دوري كل دقيقة
 
     return () => {
       clearTimeout(initialTimer);
