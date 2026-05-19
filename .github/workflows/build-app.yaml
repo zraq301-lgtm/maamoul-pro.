@@ -66,27 +66,47 @@ jobs:
             sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">nawh.ai<\/string>/' $STRINGS
           fi
 
-      - name: 7. Native Android Compilation
+      - name: 6.5. Generate App Icons from Resource
+        run: |
+          # تثبيت أداة Capacitor Assets لتوليد الأيقونات
+          npm install @capacitor/assets --save-dev
+          # التأكد من وجود ملف الأيقونة في المسار المحدد أو استخدامها لتوليد المقاسات للأندرويد
+          # ستقوم الأداة بالبحث عن المجلد وحقن الأيقونات داخل مشروع الأندرويد مباشرة
+          npx capacitor-assets generate --android --icon-foreground-png resources/icon-foreground.png
+
+      - name: 7. Native Android Compilation (APK & AAB)
         working-directory: ./android
         run: |
           chmod +x gradlew
           # إصلاح تعارض مكتبة bcprov
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
-          # البناء مع رفع كفاءة الذاكرة لتجنب الانهيار الصامت
-          ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m"
+          # البناء وإنتاج ملفات الـ APK والـ AAB مع رفع كفاءة الذاكرة لتجنب الانهيار
+          ./gradlew assembleRelease bundleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m"
 
-      - name: 8. Sign APK
+      - name: 8. Sign APK & AAB
         run: |
+          # إنشاء مفتاح التوقيع الفوري
           keytool -genkey -v -keystore nawh.jks -alias nawh_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" -dname "CN=NawhApp, O=Nawh, C=EG" -noprompt
+          
+          # تحديد مسارات الملفات المستخرجة
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
+          
+          # توقيع ملف الـ APK
           $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawh.jks --ks-pass pass:"nawh_pass_2026" --out Nawh-Final.apk "$APK_PATH"
+          
+          # توقيع ملف الـ AAB باستخدام jarsigner المتوفر ببيئة جاوا
+          jarsigner -keystore nawh.jks -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" "$AAB_PATH" nawh_alias
+          cp "$AAB_PATH" Nawh-Final.aab
 
       - name: 9. Release to GitHub
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.5.${{ github.run_number }}
           name: "Nawh Stable Build v1.5.${{ github.run_number }}"
-          files: Nawh-Final.apk
+          files: |
+            Nawh-Final.apk
+            Nawh-Final.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
