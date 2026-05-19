@@ -1,268 +1,241 @@
-import React, { useState, useMemo } from 'react';
-import { Factory, ArrowLeft, RefreshCw, Save, Trash2, Package, Database } from 'lucide-react';
-import Swal from 'sweetalert2';
+import React, { useState } from 'react';
+import { Factory, Save, ArrowLeft, AlertTriangle, Box, Info, Calendar, Clock, Plus, Trash2, Layers, Zap } from 'lucide-react';
 
-const ProductionManager = ({ stock = [], onSaveProduction, onBack, setStock }) => {
-  const [productionQty, setProductionQty] = useState('');
-  const [unitsPerCarton, setUnitsPerCarton] = useState('12');
-  const [showReport, setShowReport] = useState(false);
-  const [finalReport, setFinalReport] = useState(null);
-
+const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, setStock }) => {
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    selectedIngredients: []
+    shift: 'الأولى',
+    ingredients: {
+      دقيق: 0, سكر: 0, عجوة: 0, سمنة: 0, زبدة: 0, 
+      سولار: 0, كهرباء: 0, لبن: 0, كارتون: 0, تغليف: 0
+    },
+    products: [{ name: 'معمول جاهز', quantity: 0 }],
+    wasteQty: 0
   });
 
-  // المكونات الافتراضية
-  const GOLDEN_RECIPE = {
-    "دقيق": 0.950, "سكر": 0.100, "عجوة": 0.055, "سمنة": 0.150,
-    "زبدة": 0.050, "لبن": 0.280, "كارتون": 1, "تغليف": 0.020
+  const shifts = ['الأولى', 'الثانية', 'السهرة', 'إضافي'];
+
+  const handleChange = (e, category, field, index = null) => {
+    const value = e.target.type === 'number' ? (e.target.value === '' ? 0 : parseFloat(e.target.value)) : e.target.value;
+    
+    if (category === 'ingredients') {
+      setFormData(prev => ({ 
+        ...prev, 
+        ingredients: { ...prev.ingredients, [field]: value } 
+      }));
+    } else if (category === 'products') {
+      const updatedProducts = [...formData.products];
+      updatedProducts[index] = { ...updatedProducts[index], [field]: value };
+      setFormData(prev => ({ ...prev, products: updatedProducts }));
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }));
+    }
   };
 
-  // حماية الفلتر: التأكد من أن stock مصفوفة دائماً
-  const rawMaterials = useMemo(() => {
-    if (!Array.isArray(stock)) return [];
-    return stock.filter(item => 
-      item?.name && 
-      !item.name.includes("معمول") && 
-      !item.name.includes("جاهز")
-    );
-  }, [stock]);
-
-  const addIngredient = (name) => {
-    if (!name || formData.selectedIngredients.some(i => i.name === name)) return;
+  const addProductField = () => {
     setFormData(prev => ({
       ...prev,
-      selectedIngredients: [...prev.selectedIngredients, { name }]
+      products: [...prev.products, { name: '', quantity: 0 }]
     }));
   };
 
-  const calculateProduction = () => {
-    const cartons = parseFloat(productionQty);
-    if (isNaN(cartons) || cartons <= 0) {
-      Swal.fire('تنبيه', 'يرجى إدخال عدد الكراتين بشكل صحيح', 'warning');
-      return;
-    }
-
-    if (formData.selectedIngredients.length === 0) {
-      Swal.fire('تنبيه', 'يجب اختيار مادة خام واحدة على الأقل من القائمة', 'info');
-      return;
-    }
-
-    const totalUnits = cartons * (parseFloat(unitsPerCarton) || 12);
-    
-    // حساب التفاصيل مع حماية الأسماء
-    const details = formData.selectedIngredients.map(ing => {
-      const ratio = GOLDEN_RECIPE[ing.name?.trim()] || 0;
-      return { 
-        name: ing.name, 
-        consumed: (cartons * ratio).toFixed(3) 
-      };
-    });
-
-    setFinalReport({ cartons, totalUnits, details });
-    setShowReport(true);
+  const removeProductField = (index) => {
+    const updatedProducts = formData.products.filter((_, i) => i !== index);
+    setFormData(prev => ({ ...prev, products: updatedProducts }));
   };
 
-  const handleFinalSave = () => {
-    // التأكد من وجود بيانات التقرير قبل الحفظ لمنع كراش التطبيق
-    if (!finalReport || !finalReport.details) return;
+  const handleProcessProduction = () => {
+    if (!onSaveProduction || !setStock) {
+      console.error("Missing required functions");
+      return;
+    }
 
-    const PRODUCT_NAME = "معمول تمر فاخر (جاهز)";
-    let totalCost = 0;
-    
-    const updatedStock = stock.map(item => {
-      const reportItem = finalReport.details.find(d => d.name === item.name);
-      if (reportItem) {
-        const consumed = parseFloat(reportItem.consumed) || 0;
-        totalCost += (consumed * (parseFloat(item.price) || 0));
-        const currentBalance = parseFloat(item.balance) || 0;
-        return { ...item, balance: Math.max(0, currentBalance - consumed).toFixed(3) };
+    let totalActualCost = 0;
+    // أخذ نسخة عميقة من المخزن للعمل عليها
+    const updatedStock = JSON.parse(JSON.stringify(stock || []));
+
+    // --- منطق خصم الخامات (النقص من المخزن) ---
+    for (const [ingName, requiredQty] of Object.entries(formData.ingredients)) {
+      if (requiredQty <= 0) continue;
+      
+      const stockItem = updatedStock.find(s => s.name && s.name.trim() === ingName.trim());
+      const totalAvailable = stockItem ? (stockItem.balance || 0) : 0;
+
+      if (!stockItem || totalAvailable < requiredQty) {
+        alert(`⚠️ عجز في مادة: ${ingName}\nالمطلوب: ${requiredQty}\nالمتوفر: ${totalAvailable}`);
+        return;
       }
-      return item;
+
+      let remainingToWithdraw = requiredQty;
+      
+      // الخصم من الدفعات (Batches) لضمان دقة التكلفة والرصيد
+      if (!stockItem.batches || stockItem.batches.length === 0) {
+        totalActualCost += (requiredQty * (stockItem.price || 0));
+        stockItem.balance = (stockItem.balance || 0) - requiredQty;
+      } else {
+        while (remainingToWithdraw > 0 && stockItem.batches.length > 0) {
+          const currentBatch = stockItem.batches[0];
+          if (currentBatch.quantity <= remainingToWithdraw) {
+            totalActualCost += (currentBatch.quantity * (currentBatch.price || 0));
+            remainingToWithdraw -= currentBatch.quantity;
+            stockItem.batches.shift();
+          } else {
+            totalActualCost += (remainingToWithdraw * (currentBatch.price || 0));
+            currentBatch.quantity -= remainingToWithdraw;
+            remainingToWithdraw = 0;
+          }
+        }
+        // تحديث الرصيد الإجمالي بناءً على المتبقي في الدفعات
+        stockItem.balance = stockItem.batches.reduce((sum, b) => sum + b.quantity, 0);
+      }
+    }
+
+    const totalProductionUnits = formData.products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+    
+    if (totalProductionUnits <= 0) {
+      alert("⚠️ يرجى إدخال عدد الكراتين المنتجة أولاً");
+      return;
+    }
+
+    const costPerCarton = totalActualCost / totalProductionUnits;
+
+    // --- منطق إضافة المنتج النهائي للمخزن ---
+    formData.products.forEach(prod => {
+      if (prod.quantity <= 0) return;
+
+      let productInStock = updatedStock.find(s => s.name && s.name.trim() === prod.name.trim());
+      const newBatch = { 
+        purchaseDate: formData.date, 
+        quantity: parseFloat(prod.quantity), 
+        price: costPerCarton 
+      };
+
+      if (productInStock) {
+        if (!productInStock.batches) productInStock.batches = [];
+        productInStock.batches.push(newBatch);
+        productInStock.balance = (productInStock.balance || 0) + parseFloat(prod.quantity);
+        productInStock.price = costPerCarton; // تحديث السعر لآخر تكلفة إنتاج
+      } else {
+        updatedStock.push({
+          id: Date.now() + Math.random(),
+          name: prod.name,
+          balance: parseFloat(prod.quantity),
+          unit: 'كرتونة',
+          batches: [newBatch],
+          price: costPerCarton
+        });
+      }
     });
 
-    const unitPrice = finalReport.totalUnits > 0 ? (totalCost / finalReport.totalUnits).toFixed(2) : 0;
-    const productIndex = updatedStock.findIndex(item => item.name === PRODUCT_NAME);
+    // تحديث المخزن في الأب (هذا السطر هو المسؤول عن النقص الفعلي في الشاشات الأخرى)
+    setStock(updatedStock);
+    
+    // حفظ السجل التاريخي
+    onSaveProduction({ 
+      ...formData, 
+      id: Date.now(),
+      totalActualCost: totalActualCost.toFixed(2),
+      actualUnitCost: costPerCarton.toFixed(2),
+      totalProducedQty: totalProductionUnits
+    });
 
-    if (productIndex !== -1) {
-      const currentBal = parseFloat(updatedStock[productIndex].balance) || 0;
-      updatedStock[productIndex].balance = (currentBal + finalReport.totalUnits).toFixed(0);
-      updatedStock[productIndex].price = unitPrice;
-    } else {
-      updatedStock.push({
-        id: `prod-${Date.now()}`,
-        name: PRODUCT_NAME,
+    if (formData.wasteQty > 0 && onSaveWaste) {
+      onSaveWaste({
+        id: Date.now() + 1,
         date: formData.date,
-        unit: 'وحدة',
-        balance: finalReport.totalUnits.toString(),
-        price: unitPrice,
-        isNew: false
+        item: `هالك إنتاج - وردية ${formData.shift}`,
+        quantity: formData.wasteQty,
+        costAtLoss: (costPerCarton * formData.wasteQty).toFixed(2),
+        reason: "هالك تشغيل"
       });
     }
 
-    // التنفيذ النهائي
-    if (typeof setStock === 'function') setStock(updatedStock);
-    if (typeof onSaveProduction === 'function') {
-      onSaveProduction({
-        ...formData,
-        productionName: PRODUCT_NAME,
-        producedQty: finalReport.totalUnits,
-        details: finalReport.details
-      });
-    }
+    alert(`✅ تم الإنتاج بنجاح!\n1. تم خصم الخامات من المخزن\n2. تم إضافة المنتج الجاهز للمخزن\n3. التكلفة الإجمالية: ${totalActualCost.toFixed(2)} ج.م`);
+    if (onBack) onBack();
+  };
 
-    Swal.fire('نجاح', 'تم تحديث المخزن وخصم المواد الخام', 'success');
-    onBack();
+  const inputStyle = {
+    width: '100%', padding: '12px 15px', borderRadius: '12px', border: '2px solid #e2e8f0',
+    fontSize: '18px', fontWeight: 'bold', textAlign: 'center', outline: 'none', color: '#1e293b'
+  };
+
+  const cardStyle = {
+    backgroundColor: '#fff', borderRadius: '24px', padding: '20px', marginBottom: '20px',
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
   };
 
   return (
-    <div style={{ direction: 'rtl', padding: '15px', fontFamily: "'Tajawal', sans-serif", backgroundColor: '#f4f7f6', minHeight: '100vh' }}>
+    <div className="production-manager" style={{ direction: 'rtl', padding: '20px', backgroundColor: '#f1f5f9', minHeight: '100vh' }}>
       
-      {/* Header */}
-      <div style={headerStyle}>
-        <button onClick={onBack} style={backBtnStyle}><ArrowLeft size={20} /></button>
-        <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#1e5631' }}>تسجيل الإنتاج</h2>
-      </div>
-
-      <div style={mainGrid}>
-        {/* أدوات الإدخال */}
-        <div style={cardStyle}>
-          <h3 style={cardTitle}><Factory size={18} /> مدخلات الطبخة</h3>
-          
-          <div style={{ marginBottom: '15px' }}>
-             <label style={labelStyle}>عدد الكراتين:</label>
-             <input 
-               type="number" 
-               value={productionQty} 
-               onChange={e => setProductionQty(e.target.value)} 
-               style={bigInputStyle} 
-               placeholder="0"
-             />
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+          <Factory size={28} color="#3b82f6" />
+          <h2 style={{ margin: 0, color: '#1e293b', fontSize: '24px' }}>تشغيل الإنتاج والتكلفة</h2>
+        </div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', marginBottom: '5px', color: '#64748b' }}><Calendar size={14} /> تاريخ التشغيل</label>
+            <input type="date" value={formData.date} onChange={(e) => handleChange(e, 'info', 'date')} style={{ ...inputStyle, textAlign: 'right' }} />
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-            <span style={{ fontSize: '0.85rem' }}>قطع/كرتونة:</span>
-            <input 
-              type="number" 
-              value={unitsPerCarton} 
-              onChange={e => setUnitsPerCarton(e.target.value)} 
-              style={smallInputStyle}
-            />
-          </div>
-
-          <div style={{ borderTop: '1px solid #eee', paddingTop: '15px' }}>
-            <label style={labelStyle}>اختيار المكونات:</label>
-            <select 
-              style={selectStyle}
-              onChange={(e) => { addIngredient(e.target.value); e.target.value = ""; }}
-            >
-              <option value="">+ إضافة مادة خام</option>
-              {rawMaterials.map(m => (
-                <option key={m.id} value={m.name}>
-                  {m.name} ({m.balance})
-                </option>
-              ))}
+          <div>
+            <label style={{ display: 'block', fontSize: '14px', marginBottom: '5px', color: '#64748b' }}><Clock size={14} /> الوردية</label>
+            <select value={formData.shift} onChange={(e) => handleChange(e, 'info', 'shift')} style={inputStyle}>
+              {shifts.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '15px' }}>
-            {formData.selectedIngredients.map(ing => (
-              <div key={ing.name} style={tagStyle}>
-                {ing.name}
-                <Trash2 
-                  size={14} 
-                  style={{ cursor: 'pointer', marginRight: '5px' }} 
-                  onClick={() => setFormData(prev => ({
-                    ...prev, 
-                    selectedIngredients: prev.selectedIngredients.filter(i => i.name !== ing.name)
-                  }))} 
-                />
-              </div>
-            ))}
-          </div>
-
-          <button onClick={calculateProduction} style={mainBtnStyle}>
-            <RefreshCw size={20} /> معالجة الترحيل
-          </button>
-        </div>
-
-        {/* عرض الشبكة للمخزن */}
-        <div style={cardStyle}>
-          <h3 style={cardTitle}><Database size={18} /> حالة المخزن</h3>
-          <div style={inventoryGrid}>
-            {Array.isArray(stock) && stock.length > 0 ? stock.map(item => (
-              <div key={item?.id || Math.random()} style={gridItemStyle(item?.name || '')}>
-                <div style={itemNameStyle}>{item?.name || 'صنف غير معروف'}</div>
-                <div style={itemQtyStyle}>{item?.balance || 0}</div>
-              </div>
-            )) : <p>لا توجد بيانات بالمخزن</p>}
-          </div>
         </div>
       </div>
 
-      {/* تقرير التأكيد */}
-      {showReport && finalReport && (
-        <div style={modalOverlay}>
-          <div style={modalContent}>
-            <h3 style={{ textAlign: 'center' }}>مراجعة الحركة</h3>
-            <div style={summaryBox}>
-              <p>المنتج: <b>{finalReport.totalUnits} قطعة</b></p>
-              <div style={{ fontSize: '0.8rem', textAlign: 'right' }}>
-                {finalReport.details.map(d => (
-                  <div key={d.name}>- {d.name}: {d.consumed}</div>
-                ))}
-              </div>
-            </div>
-            <button onClick={handleFinalSave} style={confirmBtnStyle}>تأكيد وترحيل</button>
-            <button onClick={() => setShowReport(false)} style={cancelBtnStyle}>رجوع</button>
-          </div>
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+          <Zap size={20} color="#f59e0b" />
+          <h3 style={{ margin: 0, color: '#475569', fontSize: '18px' }}>كميات الخامات المستهلكة</h3>
         </div>
-      )}
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
+          {Object.keys(formData.ingredients).map(ing => {
+            const itemInStock = (stock || []).find(s => s.name && s.name.trim() === ing.trim());
+            const balance = itemInStock ? itemInStock.balance : 0;
+            return (
+              <div key={ing} style={{ background: '#f8fafc', padding: '15px', borderRadius: '18px', border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '8px' }}>{ing}</div>
+                <input type="number" value={formData.ingredients[ing] || ''} placeholder="0" onChange={(e) => handleChange(e, 'ingredients', ing)} style={inputStyle} />
+                <div style={{ fontSize: '12px', marginTop: '8px', color: balance > 0 ? '#10b981' : '#ef4444' }}>المتوفر: {balance}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ ...cardStyle, backgroundColor: '#1e293b', color: '#fff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Box size={20} color="#f59e0b" />
+            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>الإنتاج الفعلي (كرتونة)</h3>
+          </div>
+          <button onClick={addProductField} style={{ background: '#334155', color: '#fff', border: 'none', padding: '8px 15px', borderRadius: '10px' }}><Plus size={16} /> إضافة منتج</button>
+        </div>
+
+        {formData.products.map((prod, index) => (
+          <div key={index} style={{ display: 'flex', gap: '15px', marginBottom: '15px', backgroundColor: '#2d3a4f', padding: '15px', borderRadius: '15px' }}>
+            <input type="text" value={prod.name} onChange={(e) => handleChange(e, 'products', 'name', index)} style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} />
+            <input type="number" value={prod.quantity || ''} onChange={(e) => handleChange(e, 'products', 'quantity', index)} placeholder="0" style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} />
+            {index > 0 && <button onClick={() => removeProductField(index)} style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '10px', borderRadius: '10px' }}><Trash2 size={20} /></button>}
+          </div>
+        ))}
+
+        <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #334155' }}>
+          <label style={{ fontSize: '14px', color: '#f59e0b', fontWeight: 'bold' }}><AlertTriangle size={14} /> هالك الإنتاج:</label>
+          <input type="number" value={formData.wasteQty || ''} onChange={(e) => handleChange(e, 'info', 'wasteQty')} style={{ ...inputStyle, backgroundColor: '#fff', marginTop: '10px' }} placeholder="بالكرتونة" />
+        </div>
+
+        <button onClick={handleProcessProduction} style={{ width: '100%', padding: '18px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '15px', fontWeight: 'bold', fontSize: '18px', marginTop: '25px', cursor: 'pointer' }}><Save size={20} /> ترحيل البيانات وحساب التكلفة</button>
+      </div>
+
+      <button onClick={onBack} style={{ width: '100%', marginTop: '10px', background: 'transparent', border: '2px solid #cbd5e1', padding: '15px', borderRadius: '15px', color: '#64748b' }}><ArrowLeft size={18} /> العودة</button>
     </div>
   );
 };
-
-// --- تحسين الستايلات لتكون أكثر استجابة ---
-const mainGrid = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-  gap: '15px'
-};
-
-const inventoryGrid = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-  gap: '10px',
-  maxHeight: '400px',
-  overflowY: 'auto'
-};
-
-const gridItemStyle = (name) => ({
-  background: name.includes('جاهز') ? '#e8f5e9' : '#fff',
-  border: '1px solid #ddd',
-  borderRadius: '8px',
-  padding: '10px',
-  textAlign: 'center'
-});
-
-const itemNameStyle = { fontSize: '0.75rem', color: '#666', marginBottom: '5px' };
-const itemQtyStyle = { fontSize: '1rem', fontWeight: 'bold', color: '#1e5631' };
-
-const headerStyle = { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' };
-const backBtnStyle = { border: 'none', background: '#fff', padding: '8px', borderRadius: '8px', cursor: 'pointer' };
-const cardStyle = { background: '#fff', padding: '15px', borderRadius: '15px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' };
-const cardTitle = { fontSize: '1rem', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '5px' };
-const labelStyle = { display: 'block', fontSize: '0.9rem', marginBottom: '5px', fontWeight: 'bold' };
-const bigInputStyle = { width: '100%', padding: '10px', fontSize: '1.5rem', textAlign: 'center', borderRadius: '10px', border: '2px solid #ddd' };
-const smallInputStyle = { width: '60px', padding: '5px', textAlign: 'center', borderRadius: '5px', border: '1px solid #ccc' };
-const selectStyle = { width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #ccc' };
-const tagStyle = { background: '#1e5631', color: '#fff', padding: '5px 10px', borderRadius: '15px', fontSize: '0.8rem', display: 'flex', alignItems: 'center' };
-const mainBtnStyle = { width: '100%', padding: '15px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '8px' };
-const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' };
-const modalContent = { background: '#fff', padding: '20px', borderRadius: '15px', width: '100%', maxWidth: '350px' };
-const summaryBox = { background: '#f9f9f9', padding: '10px', borderRadius: '8px', margin: '15px 0' };
-const confirmBtnStyle = { width: '100%', padding: '12px', background: '#1e5631', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold' };
-const cancelBtnStyle = { width: '100%', padding: '10px', background: '#eee', color: '#333', border: 'none', borderRadius: '8px', marginTop: '8px' };
 
 export default ProductionManager;
