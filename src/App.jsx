@@ -31,7 +31,7 @@ const showSwal = (title, icon = 'success') => {
   Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
 };
 
-// مصفوفة الموديولات لإدارة التخزين المحلي والربط المتكامل لمنع تكرار الأسطر
+// مصفوفة الموديولات الشاملة لإدارة التخزين الفعلي وقاعدة البيانات السحابية لنظام معمول
 const SYNC_MODULES = [
   { key: 'stock', module: 'inventory_module' },
   { key: 'salesData', module: 'sales_module' },
@@ -54,7 +54,7 @@ const App = () => {
     } catch (e) { return initialValue; }
   };
 
-  // --- States لإدارة البيانات محلياً في الواجهة لمشروع Maamoul ERP ---
+  // --- States لإدارة البيانات محلياً وعالمياً لنظام Maamoul ERP ---
   const [stock, setStock] = useState(() => loadInitial('stock', []));
   const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
   const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
@@ -67,7 +67,7 @@ const App = () => {
   const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
   const [staff, setStaff] = useState(() => loadInitial('staff', []));
 
-  // تجميع الـ Setters في كائن لتسهيل المزامنة الذكية الديناميكية
+  // تجميع الـ Setters لتسهيل استدعائها ديناميكياً عند المزامنة والتحميل السحابي
   const setters = useMemo(() => ({
     stock: setStock, salesData: setSalesData, inventory: setInventory,
     expenses: setExpenses, waste: setWaste, suppliers: setSuppliers,
@@ -75,25 +75,41 @@ const App = () => {
     waitingList: setSupplierWaitingList, cashBook: setCashBook, staff: setStaff
   }), []);
 
-  // 1. إدارة الحفظ المحلي التلقائي والذكي بملف واحد متكامل
+  // 1. التخزين المحلي الآمن والتلقائي فور حدوث أي تعديل في الـ States
   useEffect(() => {
     if (isInitialLoading) return;
-    SYNC_MODULES.forEach(item => {
-      const localValue = item.key === 'stock' ? stock :
-                         item.key === 'salesData' ? salesData :
-                         item.key === 'inventory' ? inventory :
-                         item.key === 'productionData' ? productionData :
-                         item.key === 'expenses' ? expenses :
-                         item.key === 'customers' ? customers :
-                         item.key === 'suppliers' ? suppliers : staff;
-      localStorage.setItem(item.key, JSON.stringify(localValue));
-    });
+    
+    localStorage.setItem('stock', JSON.stringify(stock));
+    localStorage.setItem('salesData', JSON.stringify(salesData));
+    localStorage.setItem('inventory', JSON.stringify(inventory));
+    localStorage.setItem('productionData', JSON.stringify(productionData));
+    localStorage.setItem('expenses', JSON.stringify(expenses));
+    localStorage.setItem('customers', JSON.stringify(customers));
+    localStorage.setItem('suppliers', JSON.stringify(suppliers));
+    localStorage.setItem('staff', JSON.stringify(staff));
     localStorage.setItem('waitingList', JSON.stringify(supplierWaitingList));
     localStorage.setItem('cashBook', JSON.stringify(cashBook));
     localStorage.setItem('waste', JSON.stringify(waste));
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff, isInitialLoading]);
 
-  // 2. 📥 محرك جلب البيانات السحابي (GET)
+  // دالة مزامنة موديول معين بشكل فوري عند الإضافة (Real-time Sync Event)
+  const syncModuleToServer = async (moduleName, dataPayload) => {
+    if (!dataPayload || dataPayload.length === 0) return;
+    try {
+      await CapacitorHttp.post({
+        url: 'https://maamoul-pro-five.vercel.app/api/sync',
+        headers: { 'Content-Type': 'application/json' },
+        data: {
+          collectionName: moduleName,
+          data: dataPayload
+        }
+      });
+    } catch (err) {
+      console.error(`🚨 Failed instant sync for ${moduleName}:`, err);
+    }
+  };
+
+  // 2. 📥 محرك الجلب والتنزيل الشامل عند فتح التطبيق (مقاوم لحذف التطبيق)
   useEffect(() => {
     const downloadDataFromMaamoulCloud = async () => {
       try {
@@ -102,26 +118,22 @@ const App = () => {
         for (const item of SYNC_MODULES) {
           const cloudUrl = `https://maamoul-pro-five.vercel.app/api/get-data?collectionName=${item.module}&t=${new Date().getTime()}`;
 
-          const options = {
+          const response = await CapacitorHttp.get({
             url: cloudUrl,
-            method: 'GET',
             headers: { 
               'Cache-Control': 'no-cache, no-store, must-revalidate',
               'Pragma': 'no-cache',
               'Accept': 'application/json'
             }
-          };
-
-          const response = await CapacitorHttp.get(options);
+          });
 
           if (response.status === 200 && response.data) {
             let cloudRecords = response.data;
             
             if (typeof cloudRecords === 'string') {
-              try { cloudRecords = JSON.parse(cloudRecords); } catch (e) { console.error("🚨 خطأ موديول: " + item.key, e); }
+              try { cloudRecords = JSON.parse(cloudRecords); } catch (e) { }
             }
 
-            // إذا كانت المخرجات مغلفة بداخل كائن نجاح المونجو التقليدي
             if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
               cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
             }
@@ -149,7 +161,7 @@ const App = () => {
     downloadDataFromMaamoulCloud();
   }, [setters]);
 
-  // 3. 📤 محرك المزامنة الخلفية التلقائي لحفظ السجلات (تم تعديله ليطابق الكود الناجح)
+  // 3. 📤 محرك المزامنة التلقائية الدورية كخط دفاع ثانٍ لحفظ البيانات غير المرفوعة
   useEffect(() => {
     if (isInitialLoading) return;
 
@@ -160,49 +172,32 @@ const App = () => {
           if (localData) {
             const parsed = JSON.parse(localData);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              
-              const saveOptions = {
-                url: 'https://maamoul-pro-five.vercel.app/api/sync',
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json'
-                },
-                // هنا التغيير الجوهري: إرسال الحقول كـ collectionName و data تماماً كالمشروع الآخر الفعال
-                data: {
-                  collectionName: item.module,
-                  data: parsed  
-                }
-              };
-              
-              await CapacitorHttp.post(saveOptions);
+              await syncModuleToServer(item.module, parsed);
             }
           }
         }
       } catch (err) {
-        console.error("🚨 Cloud Save Sync Error:", err);
+        console.error("🚨 Background Sync Error:", err);
       }
     };
 
-    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 15000);
-    const interval = setInterval(runBackgroundSyncToMaamoul, 120000);
+    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 10000);
+    const interval = setInterval(runBackgroundSyncToMaamoul, 60000); // مزامنة شاملة كل دقيقة
 
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
     };
-  }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]);
+  }, [isInitialLoading]);
 
-  // 🎯 دالة الحذف السحابية
+  // 🎯 دالة الحذف السحابي الفوري من قاعدة البيانات
   const deleteCloudData = async (moduleName, id) => {
     try {
-      const options = {
+      const response = await CapacitorHttp.post({
         url: 'https://maamoul-pro-five.vercel.app/api/delete-item',
-        method: 'POST', // أو DELETE بحسب إعداد السيرفر لديك بالمشروع الآخر
         headers: { 'Content-Type': 'application/json' },
         data: { collectionName: moduleName, id }
-      };
-
-      const response = await CapacitorHttp.post(options);
+      });
       return response.status === 200;
     } catch (err) {
       console.error("🚨 Cloud Delete Error:", err);
@@ -210,19 +205,17 @@ const App = () => {
     }
   };
 
-  // 🤖 دالة معالجة وتحليل الأداء والتقارير عبر محرك الذكاء الاصطناعي
+  // 🤖 محرك تقارير الذكاء الاصطناعي (raqqa-ai)
   const analyzeSystemPerformanceWithAI = async (analysisPrompt) => {
     try {
-      const options = {
+      const response = await CapacitorHttp.post({
         url: 'https://maamoul-pro-five.vercel.app/api/raqqa-ai',
-        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         data: {
           prompt: analysisPrompt,
           systemSnapshot: { financialStats, currentStockCount: stock.length }
         }
-      };
-      const response = await CapacitorHttp.post(options);
+      });
       return response.data;
     } catch (err) {
       console.error("🚨 AI Engine Error:", err);
@@ -230,7 +223,7 @@ const App = () => {
     }
   };
 
-  // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم ---
+  // --- إدارة الحسابات والعمليات الكلية التلقائية للوحة التحكم ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
     const totalExp = expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
@@ -241,40 +234,99 @@ const App = () => {
     return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
   }, [salesData, expenses, inventory, stock]);
 
+  // --- دوال الحفظ الذكي الفوري من الشاشات الفرعية ومزامنتها مباشرة ---
+  
   const handleSavePurchase = (p) => {
-    setInventory(prev => [...prev, p]);
+    const updatedInventory = [...inventory, p];
+    setInventory(updatedInventory);
+    syncModuleToServer('purchases_module', updatedInventory);
+
     setStock(prev => {
       const idx = prev.findIndex(s => s.name === p.item);
+      let nextStock = [...prev];
       if (idx > -1) {
-        const up = [...prev];
-        up[idx] = { ...up[idx], balance: (up[idx].balance || 0) + parseFloat(p.quantity || 0) };
-        return up;
+        nextStock[idx] = { ...nextStock[idx], balance: (nextStock[idx].balance || 0) + parseFloat(p.quantity || 0) };
+      } else {
+        nextStock.push({ id: Date.now(), name: p.item, balance: parseFloat(p.quantity), price: p.price });
       }
-      return [...prev, { id: Date.now(), name: p.item, balance: parseFloat(p.quantity), price: p.price }];
+      syncModuleToServer('inventory_module', nextStock);
+      return nextStock;
     });
   };
 
-  // --- محرك عرض الشاشات والواجهات الفرعية لتطبيق معمول ---
+  const handleSaveSales = (s) => {
+    const updatedSales = [...salesData, s];
+    setSalesData(updatedSales);
+    syncModuleToServer('sales_module', updatedSales);
+  };
+
+  const handleSaveProduction = (p) => {
+    const updatedProd = [...productionData, p];
+    setProductionData(updatedProd);
+    syncModuleToServer('manufacturing_module', updatedProd);
+  };
+
+  const handleSaveExpense = (e) => {
+    const updatedExp = [...expenses, e];
+    setExpenses(updatedExp);
+    syncModuleToServer('dashboard_module', updatedExp);
+  };
+
+  const handleSaveCustomer = (c) => {
+    setCustomers(prev => {
+      const updated = typeof c === 'function' ? c(prev) : [...prev, c];
+      syncModuleToServer('customers_module', updated);
+      return updated;
+    });
+  };
+
+  const handleSaveSupplier = (sup) => {
+    setSuppliers(prev => {
+      const updated = typeof sup === 'function' ? sup(prev) : [...prev, sup];
+      syncModuleToServer('suppliers_module', updated);
+      return updated;
+    });
+  };
+
+  const handleSaveStaff = (st) => {
+    const updatedStaff = typeof st === 'function' ? st(staff) : st;
+    setStaff(updatedStaff);
+    syncModuleToServer('staff_module', updatedStaff);
+  };
+
+  const handleSaveWaste = (w) => {
+    setWaste(prev => [...prev, w]);
+  };
+
+  // --- محرك عرض شاشات وموديولات نظام معمول الفعلي ---
   const renderPage = () => {
     const props = { 
       onBack: () => setActivePage('dashboard'), 
-      stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock,
-      setCustomers, setSuppliers, setStaff, deleteCloudData, analyzeSystemPerformanceWithAI
+      stock, inventory, salesData, expenses, waste, suppliers, customers, staff,
+      setStock, deleteCloudData, analyzeSystemPerformanceWithAI,
+      onPurchaseComplete: handleSavePurchase,
+      onSaveSales: handleSaveSales,
+      onSaveProduction: handleSaveProduction,
+      onSave: handleSaveExpense,
+      onSaveCustomer: handleSaveCustomer,
+      onSaveSupplier: handleSaveSupplier,
+      onUpdateStaff: handleSaveStaff,
+      onSaveWaste: handleSaveWaste
     };
     
     switch (activePage) {
       case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
-      case 'PurchasesManager': return <PurchasesManager {...props} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
-      case 'Sales': return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
-      case 'ProductionManager': return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
+      case 'PurchasesManager': return <PurchasesManager {...props} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
+      case 'Sales': return <Sales {...props} />;
+      case 'ProductionManager': return <ProductionManager {...props} />;
       case 'Inventory': return <Inventory {...props} categories={stock} onAddItem={handleSavePurchase} />;
-      case 'Waste': return <Waste {...props} onSaveWaste={(w) => setWaste(prev => [...prev, w])} />;
-      case 'Expenses': return <Expenses {...props} onSave={(e) => setExpenses(prev => [...prev, e])} />;
-      case 'Suppliers': return <Suppliers {...props} onSaveSupplier={(sup) => setSuppliers(prev => (typeof sup === 'function' ? sup(prev) : [...prev, sup]))} />;
+      case 'Waste': return <Waste {...props} />;
+      case 'Expenses': return <Expenses {...props} />;
+      case 'Suppliers': return <Suppliers {...props} />;
       case 'Financials': return <Financials {...props} stats={financialStats} cashBook={cashBook} />;
       case 'Reports': return <Reports {...props} productionHistory={productionData} stats={financialStats} />;
-      case 'Customers': return <Customers {...props} onSaveCustomer={(c) => setCustomers(prev => (typeof c === 'function' ? c(prev) : [...prev, c]))} />;
-      case 'StaffManagement': return <StaffManagement {...props} onUpdateStaff={(st) => setStaff(st)} />;
+      case 'Customers': return <Customers {...props} />;
+      case 'StaffManagement': return <StaffManagement {...props} />;
       case 'Settings': return <Settings {...props} />;
       default: return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
     }
