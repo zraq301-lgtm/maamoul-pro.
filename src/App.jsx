@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Swal from 'sweetalert2';
 
+// استيراد أداة الاتصال الأصلية للهواتف الذكية من كاباسيتور
+import { CapacitorHttp } from '@capacitor/core';
+
 // استيراد الروابط والمحرك الموحد من المسار المطلوب
 import apiService, { apiEndpoints } from './services/db';
 
@@ -90,6 +93,27 @@ const App = () => {
     localStorage.setItem('waste', JSON.stringify(waste));
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff, isInitialLoading]);
 
+  // 🎯 دالة الحذف السحابية الصامتة المعتمدة على CapacitorHttp عند طلب مسح السجلات من المكونات الفرعية
+  const deleteCloudData = async (moduleName, recordId) => {
+    try {
+      const options = {
+        url: 'https://nawah-ai-db.vercel.app/api/delete-engine-data',
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        params: {
+          module_name: moduleName,
+          record_id: `${recordId}_records`
+        }
+      };
+
+      const response = await CapacitorHttp.delete(options);
+      return response.status === 200;
+    } catch (err) {
+      console.error("🚨 Cloud Delete Error:", err);
+      return false;
+    }
+  };
+
   // --- العمليات والتحليلات الحسابية الكلية للوحة التحكم ---
   const financialStats = useMemo(() => {
     const totalIncome = salesData.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
@@ -119,7 +143,7 @@ const App = () => {
     const props = { 
       onBack: () => setActivePage('dashboard'), 
       stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock,
-      setCustomers, setSuppliers, setStaff
+      setCustomers, setSuppliers, setStaff, deleteCloudData
     };
     
     switch (activePage) {
