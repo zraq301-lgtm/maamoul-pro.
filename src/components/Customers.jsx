@@ -12,7 +12,8 @@ const Customers = ({ onBack, customers = [], onSaveCustomer }) => {
     (c.name || '').includes(searchTerm) || (c.phone || '').includes(searchTerm)
   );
 
-  const handleAdd = () => {
+  // 🔥 تحويل الدالة إلى async لتطبيق منطق الحفظ السحابي والانتظار المحترف
+  const handleAdd = async () => {
     if (!newCust.name) { 
       Swal.fire({
         title: 'تنبيه',
@@ -24,23 +25,45 @@ const Customers = ({ onBack, customers = [], onSaveCustomer }) => {
       return; 
     }
 
-    // 🔥 الاستدعاء الصحيح للدالة الممررة من السيرفر والمزامنة السحابية
-    onSaveCustomer({ ...newCust, id: Date.now() }); 
-    
-    // تصفير الحقول وإغلاق الواجهة
-    setNewCust({ name: '', phone: '', address: '' }); 
-    setShowAdd(false); 
-
-    // تنبيه نجاح متناسق ومحترف
+    // 1️⃣ إظهار مؤشر التحميل أثناء الاتصال بالسيرفر
     Swal.fire({
-      title: 'تمت الإضافة السحابية',
-      text: 'تم حفظ العميل وتأمين بياناته بنجاح 🚀',
-      icon: 'success',
-      timer: 1800,
-      showConfirmButton: false,
-      position: 'center',
-      toast: true
+      title: 'جاري الحفظ السحابي...',
+      text: 'يتم الآن تأمين ورفع بيانات العميل الجديد',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
     });
+
+    try {
+      // 2️⃣ استدعاء الدالة وانتظار تنفيذها (إذا كانت ترفع إلى قاعدة بيانات أو سيرفر)
+      await onSaveCustomer({ ...newCust, id: Date.now() }); 
+      
+      // 3️⃣ تصفير الحقول وإغلاق الواجهة بعد النجاح
+      setNewCust({ name: '', phone: '', address: '' }); 
+      setShowAdd(false); 
+
+      // 4️⃣ تنبيه نجاح متناسق ومحترف بعد اكتمال الرفع
+      Swal.fire({
+        title: 'تمت الإضافة السحابية',
+        text: 'تم حفظ العميل وتأمين بياناته بنجاح 🚀',
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false,
+        position: 'center',
+        toast: true
+      });
+
+    } catch (error) {
+      // 5️⃣ التعامل مع حالات فشل الاتصال بالسيرفر أو انقطاع الإنترنت
+      console.error("خطأ في حفظ العميل:", error);
+      Swal.fire({
+        title: 'فشل الحفظ',
+        text: 'حدث خطأ أثناء مزامنة البيانات سحابياً، يرجى المحاولة لاحقاً',
+        icon: 'error',
+        confirmButtonText: 'حسناً'
+      });
+    }
   };
 
   return (
