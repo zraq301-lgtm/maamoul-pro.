@@ -11,17 +11,21 @@ export default async function handler(request, response) {
     try {
         const client = await clientPromise;
         const db = client.db("maamoul_db");
-        const { collectionName, data } = request.body;
+        
+        // دعم التسميتين لضمان عدم حدوث أي تعارض بين الفرونت والسيرفر
+        const { collectionName, module_name, data, jsondata } = request.body;
+        
+        const targetCollection = module_name || collectionName;
+        const targetData = jsondata || data;
 
-        // التحقق من وجود البيانات الأساسية
-        if (!collectionName || data === undefined || data === null) {
-            return response.status(400).json({ error: 'بيانات ناقصة' });
+        // التحقق الذكي من وجود البيانات الأساسية لمنع كراش 500
+        if (!targetCollection || targetData === undefined || targetData === null) {
+            return response.status(400).json({ error: 'بيانات ناقصة، يرجى التأكد من إرسال اسم القسم والبيانات بشكل صحيح' });
         }
 
-        if (Array.isArray(data)) {
-            // --- علاج الخطأ الرئيسي هنا ---
+        if (Array.isArray(targetData)) {
             // إذا كانت المصفوفة فارغة، ننهي الطلب بنجاح دون إرسال شيء لقاعدة البيانات
-            if (data.length === 0) {
+            if (targetData.length === 0) {
                 return response.status(200).json({ 
                     success: true, 
                     message: 'لا توجد بيانات للمزامنة (المصفوفة فارغة)',
@@ -29,7 +33,8 @@ export default async function handler(request, response) {
                 });
             }
 
-            const operations = data.map(item => {
+            const operations = targetData.map(item => {
+                // التأكد من تنظيف الـ _id الخاص بمونجو دي بي القديم إن وجد لمنع أخطاء Immutable Field
                 const { _id, ...cleanData } = item; 
                 
                 return {
@@ -46,16 +51,16 @@ export default async function handler(request, response) {
                 };
             });
 
-            // الآن استدعاء bulkWrite آمن لأننا تأكدنا أن data.length > 0
-            const result = await db.collection(collectionName).bulkWrite(operations);
+            // تنفيذ الحفظ الشامل والمجمع في خطوة واحدة سريعة واحترافية
+            const result = await db.collection(targetCollection).bulkWrite(operations);
             return response.status(200).json({ success: true, result });
 
         } else {
-            // التعامل مع عنصر واحد (Object)
-            const { _id, ...cleanData } = data;
+            // التعامل الآمن مع عنصر واحد منفرد (Object)
+            const { _id, ...cleanData } = targetData;
             
-            const result = await db.collection(collectionName).updateOne(
-                { id: data.id },
+            const result = await db.collection(targetCollection).updateOne(
+                { id: targetData.id },
                 { $set: { ...cleanData, updatedAt: new Date() } },
                 { upsert: true }
             );
@@ -64,6 +69,6 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('Database Sync Error:', error);
-        return response.status(500).json({ error: error.message });
+        return response.status(500).json({ error: 'حدث خطأ داخلي أثناء حفظ البيانات', details: error.message });
     }
 }
