@@ -1,4 +1,18 @@
-import clientPromise from "../lib/mongodb.js";
+import { MongoClient } from "mongodb";
+
+const uri = process.env.MONGODB_URI;
+let client;
+let clientPromise;
+
+if (!uri) {
+    throw new Error("الرجاء إضافة MONGODB_URI إلى إعدادات البيئة");
+}
+
+if (!global._mongoClientPromise) {
+    client = new MongoClient(uri);
+    global._mongoClientPromise = client.connect();
+}
+clientPromise = global._mongoClientPromise;
 
 export default async function handler(request, response) {
     response.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,38 +25,31 @@ export default async function handler(request, response) {
     try {
         const client = await clientPromise;
         const db = client.db("maamoul_db");
-        
-        // دعم التسميتين لضمان عدم حدوث أي تعارض بين الفرونت والسيرفر
-        const { collectionName, module_name, data, jsondata } = request.body;
-        
-        const targetCollection = module_name || collectionName;
-        const targetData = jsondata || data;
+        const { collectionName, data } = request.body;
 
-        // التحقق الذكي من وجود البيانات الأساسية لمنع كراش 500
-        if (!targetCollection || targetData === undefined || targetData === null) {
-            return response.status(400).json({ error: 'بيانات ناقصة، يرجى التأكد من إرسال اسم القسم والبيانات بشكل صحيح' });
+        if (!collectionName || data === undefined || data === null) {
+            return response.status(400).json({ error: 'بيانات ناقصة' });
         }
 
-        if (Array.isArray(targetData)) {
-            // إذا كانت المصفوفة فارغة، ننهي الطلب بنجاح دون إرسال شيء لقاعدة البيانات
-            if (targetData.length === 0) {
-                return response.status(200).json({ 
-                    success: true, 
-                    message: 'لا توجد بيانات للمزامنة (المصفوفة فارغة)',
-                    result: { matchedCount: 0, upsertedCount: 0 } 
-                });
-            }
+        // --- التعديل الجوهري لضمان عدم اختفاء البيانات ---
+        
+        // إذا كانت البيانات مصفوفة
+        if (Array.isArray(data)) {
+            if (data.length === 0) return response.status(200).json({ success: true, message: 'مصفوفة فارغة' });
 
-            const operations = targetData.map(item => {
-                // التأكد من تنظيف الـ _id الخاص بمونجو دي بي القديم إن وجد لمنع أخطاء Immutable Field
+            const operations = data.map(item => {
+                // نستخدم id المنتج أو نولد واحد جديد فوراً لضمان عدم التداخل
+                const uniqueId = item.id || Date.now() + Math.random().toString(36).substr(2, 9);
                 const { _id, ...cleanData } = item; 
                 
                 return {
                     updateOne: {
-                        filter: { id: item.id }, 
+                        // الفلترة بالـ id لضمان عدم التكرار، والـ upsert للإضافة إذا لم يوجد
+                        filter: { id: uniqueId }, 
                         update: { 
                             $set: { 
                                 ...cleanData, 
+                                id: uniqueId, // نؤكد وجود الـ id
                                 updatedAt: new Date() 
                             } 
                         },
@@ -51,17 +58,17 @@ export default async function handler(request, response) {
                 };
             });
 
-            // تنفيذ الحفظ الشامل والمجمع في خطوة واحدة سريعة واحترافية
-            const result = await db.collection(targetCollection).bulkWrite(operations);
+            const result = await db.collection(collectionName).bulkWrite(operations);
             return response.status(200).json({ success: true, result });
 
         } else {
-            // التعامل الآمن مع عنصر واحد منفرد (Object)
-            const { _id, ...cleanData } = targetData;
+            // إذا كان كائناً واحداً (عملية إنتاج واحدة)
+            const uniqueId = data.id || Date.now() + Math.random().toString(36).substr(2, 9);
+            const { _id, ...cleanData } = data;
             
-            const result = await db.collection(targetCollection).updateOne(
-                { id: targetData.id },
-                { $set: { ...cleanData, updatedAt: new Date() } },
+            const result = await db.collection(collectionName).updateOne(
+                { id: uniqueId },
+                { $set: { ...cleanData, id: uniqueId, updatedAt: new Date() } },
                 { upsert: true }
             );
             return response.status(200).json({ success: true, result });
@@ -69,6 +76,6 @@ export default async function handler(request, response) {
 
     } catch (error) {
         console.error('Database Sync Error:', error);
-        return response.status(500).json({ error: 'حدث خطأ داخلي أثناء حفظ البيانات', details: error.message });
+        return response.status(500).json({ error: error.message });
     }
 }
