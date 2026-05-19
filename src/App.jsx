@@ -31,7 +31,7 @@ const showSwal = (title, icon = 'success') => {
   Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
 };
 
-// مصفوفة الموديولات لإدارة التخزين المحلي المتكامل لمنع تكرار الأسطر
+// مصفوفة الموديولات لإدارة التخزين المحلي والربط المتكامل لمنع تكرار الأسطر
 const SYNC_MODULES = [
   { key: 'stock', module: 'inventory_module' },
   { key: 'salesData', module: 'sales_module' },
@@ -45,7 +45,7 @@ const SYNC_MODULES = [
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
-  const [isInitialLoading, setIsInitialLoading] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const loadInitial = (key, initialValue) => {
     try {
@@ -93,11 +93,110 @@ const App = () => {
     localStorage.setItem('waste', JSON.stringify(waste));
   }, [stock, salesData, inventory, expenses, waste, suppliers, customers, productionData, supplierWaitingList, cashBook, staff, isInitialLoading]);
 
-  // 🎯 دالة الحذف السحابية الصامتة المعتمدة على CapacitorHttp عند طلب مسح السجلات من المكونات الفرعية
+  // 2. 📥 محرك جلب البيانات السحابي عند إقلاع التطبيق (get-data)
+  useEffect(() => {
+    const downloadDataFromMaamoulCloud = async () => {
+      try {
+        let importedCount = 0;
+
+        for (const item of SYNC_MODULES) {
+          const options = {
+            url: `https://maamoul-pro-five.vercel.app/api/get-data?t=${new Date().getTime()}`,
+            method: 'GET',
+            headers: { 
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Accept': 'application/json'
+            },
+            params: {
+              module_name: item.module,
+              record_id: `${item.key}_records`
+            }
+          };
+
+          const response = await CapacitorHttp.get(options);
+
+          if (response.status === 200 && response.data) {
+            let cloudRecords = response.data;
+            
+            if (typeof cloudRecords === 'string') {
+              try { cloudRecords = JSON.parse(cloudRecords); } catch (e) { console.error("🚨 خطأ موديول: " + item.key, e); }
+            }
+
+            if (cloudRecords && typeof cloudRecords === 'object' && !Array.isArray(cloudRecords)) {
+              cloudRecords = cloudRecords.data || cloudRecords.payload || cloudRecords.records || Object.values(cloudRecords)[0] || [];
+            }
+
+            if (Array.isArray(cloudRecords) && cloudRecords.length > 0) {
+              if (setters[item.key]) {
+                setters[item.key](cloudRecords);
+                localStorage.setItem(item.key, JSON.stringify(cloudRecords)); 
+                importedCount++;
+              }
+            }
+          }
+        }
+
+        setIsInitialLoading(false);
+        if (importedCount > 0) {
+          showSwal('تم استعادة وتحديث كافة سجلات نظام معمول بنجاح!', 'success');
+        }
+      } catch (err) {
+        console.error("🚨 Cloud Download Error:", err);
+        setIsInitialLoading(false);
+      }
+    };
+
+    downloadDataFromMaamoulCloud();
+  }, [setters]);
+
+  // 3. 📤 محرك المزامنة الخلفية التلقائي لحفظ السجلات (sync)
+  useEffect(() => {
+    if (isInitialLoading) return;
+
+    const runBackgroundSyncToMaamoul = async () => {
+      try {
+        for (const item of SYNC_MODULES) {
+          const localData = localStorage.getItem(item.key);
+          if (localData) {
+            const parsed = JSON.parse(localData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const saveOptions = {
+                url: 'https://maamoul-pro-five.vercel.app/api/sync',
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+                },
+                data: {
+                  module_name: item.module,
+                  record_id: `${item.key}_records`,
+                  jsondata: parsed  
+                }
+              };
+              await CapacitorHttp.post(saveOptions);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("🚨 Cloud Save Sync Error:", err);
+      }
+    };
+
+    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 15000);
+    const interval = setInterval(runBackgroundSyncToMaamoul, 120000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, isInitialLoading]);
+
+  // 🎯 دالة الحذف السحابية الصامتة المعتمدة على CapacitorHttp لحذف السجلات (delete-item)
   const deleteCloudData = async (moduleName, recordId) => {
     try {
       const options = {
-        url: 'https://nawah-ai-db.vercel.app/api/delete-engine-data',
+        url: 'https://maamoul-pro-five.vercel.app/api/delete-item',
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         params: {
@@ -111,6 +210,26 @@ const App = () => {
     } catch (err) {
       console.error("🚨 Cloud Delete Error:", err);
       return false;
+    }
+  };
+
+  // 🤖 دالة معالجة وتحليل الأداء والتقارير عبر محرك الذكاء الاصطناعي (raqqa-ai)
+  const analyzeSystemPerformanceWithAI = async (analysisPrompt) => {
+    try {
+      const options = {
+        url: 'https://maamoul-pro-five.vercel.app/api/raqqa-ai',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        data: {
+          prompt: analysisPrompt,
+          systemSnapshot: { financialStats, currentStockCount: stock.length }
+        }
+      };
+      const response = await CapacitorHttp.post(options);
+      return response.data;
+    } catch (err) {
+      console.error("🚨 AI Engine Error:", err);
+      return null;
     }
   };
 
@@ -143,7 +262,7 @@ const App = () => {
     const props = { 
       onBack: () => setActivePage('dashboard'), 
       stock, inventory, salesData, expenses, waste, suppliers, customers, staff, setStock,
-      setCustomers, setSuppliers, setStaff, deleteCloudData
+      setCustomers, setSuppliers, setStaff, deleteCloudData, analyzeSystemPerformanceWithAI
     };
     
     switch (activePage) {
