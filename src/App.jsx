@@ -296,10 +296,10 @@ const App = () => {
     
     switch (activePage) {
       case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
-      case 'PurchasesManager': return <PurchasesManager {...props} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
+      case 'PurchasesManager': return <PurchasesManager {...props} onSave={handleSavePurchase} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
       case 'Sales': return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
       case 'ProductionManager': return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
-      case 'Inventory': return <Inventory {...props} categories={stock} onAddItem={handleSavePurchase} />;
+      case 'Inventory': return <Inventory {...props} categories={stock} onSave={handleSavePurchase} onAddItem={handleSavePurchase} />;
       case 'Waste': return <Waste {...props} onSaveWaste={(w) => setWaste(prev => [...prev, w])} />;
       case 'Expenses': return <Expenses {...props} onSave={(e) => setExpenses(prev => [...prev, e])} />;
       case 'Suppliers': return <Suppliers {...props} onSaveSupplier={(sup) => setSuppliers(prev => (typeof sup === 'function' ? sup(prev) : [...prev, sup]))} />;
