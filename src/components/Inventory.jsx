@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Package, Truck, Archive } from 'lucide-react';
 
-import RawMaterials from './page/RawMaterials';
-import SupplyEntry from './page/SupplyEntry';
-import FinishedProducts from './page/FinishedProducts';
+// تصحيح حالة الأحرف إلى Page بحرف كبير لتتوافق مع السيرفر وهيكلة ملفاتك
+import RawMaterials from './Page/RawMaterials';
+import SupplyEntry from './Page/SupplyEntry';
+import FinishedProducts from './Page/FinishedProducts';
 
-// تم إضافة onSaveFinishedProduct لاستلام دالة حفظ المنتج النهائي من المحرك الرئيسي
 const Inventory = ({ stock = [], onDeleteItem, onInventoryEntry, onSaveFinishedProduct }) => {
   const [activeTab, setActiveTab] = useState('raw');
 
@@ -74,7 +74,7 @@ const Inventory = ({ stock = [], onDeleteItem, onInventoryEntry, onSaveFinishedP
           <FinishedProducts 
             categories={dataList} 
             onDeleteItem={onDeleteItem} 
-            onSaveFinishedProduct={onSaveFinishedProduct} /* تمرير الدالة هنا للحفظ بالاسم من وإلى الصفحة */
+            onSaveFinishedProduct={onSaveFinishedProduct} 
           />
         )}
       </div>
