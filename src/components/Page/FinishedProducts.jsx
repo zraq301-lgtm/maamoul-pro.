@@ -2,11 +2,8 @@ import React from 'react';
 import { Trash2 } from 'lucide-react';
 
 const FinishedProducts = ({ categories, onDeleteItem }) => {
-  // تصفية المنتجات النهائية فقط
-  const finishedData = categories.filter(item => {
-    const name = (item.name || '').toLowerCase();
-    return name.includes("معمول") || name.includes("جاهز");
-  });
+  // تم إلغاء تصفية الأسماء والاعتماد على المنتجات القادمة مباشرة بالكامل دون قيود
+  const finishedData = categories || [];
 
   return (
     <div style={{ padding: '10px' }}>
@@ -14,7 +11,7 @@ const FinishedProducts = ({ categories, onDeleteItem }) => {
         <div key={item.id} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h3 style={{ margin: 0 }}>{item.name}</h3>
-            <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} />
+            <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} style={{ cursor: 'pointer' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#666' }}>
             <span>المتوفر: <b>{item.balance}</b> علبة</span>
