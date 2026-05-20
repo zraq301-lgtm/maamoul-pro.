@@ -243,8 +243,21 @@ const App = () => {
     const cashBalance = totalIncome - (totalExp + totalPurchasesCash);
     const stockValue = stock.reduce((sum, item) => sum + ((parseFloat(item.balance) || 0) * (parseFloat(item.price) || 0)), 0);
 
-    return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
+  return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
   }, [salesData, expenses, inventory, stock]);
+
+  // ==========================================
+  // [ذكاء تصنيف ERO المضاف للمخزون القادم]
+  // ==========================================
+  const erpCategorizedStock = useMemo(() => {
+    const items = stock || [];
+    // فرز وتوزيع المنتجات الجاهزة والنهائية بناءً على الكلمة الدليليلة
+    const finished = items.filter(item => (item.name || '').toString().includes('نهائي'));
+    // فرز وتوزيع المواد الخام (باقي العناصر التي لا تحتوي على كلمة نهائي)
+    const raw = items.filter(item => !(item.name || '').toString().includes('نهائي'));
+    
+    return { finished, raw };
+  }, [stock]);
 
   // دالة معالجة وحفظ المشتريات وتحديث المخزون الفوري محلياً وسحابياً
   const handleSavePurchase = (p) => {
@@ -295,7 +308,16 @@ const App = () => {
     
     switch (activePage) {
       case 'dashboard': 
-        return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
+        return (
+          <Dashboard 
+            setActivePage={setActivePage} 
+            stats={financialStats} 
+            staffCount={staff.length} 
+            productionHistory={productionData} // إرسال عمليات الإنتاج للعرض في جدول لوحة التحكم
+            stock={stock}
+            fetchData={downloadDataFromMaamoulCloud}
+          />
+        );
       
       case 'PurchasesManager': 
         return <PurchasesManager {...props} onSave={handleSavePurchase} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
@@ -307,7 +329,8 @@ const App = () => {
         return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
       
       case 'Inventory': 
-        return <Inventory {...props} categories={stock} onSave={handleSavePurchase} onAddItem={(item) => setStock(prev => [...prev, item])} />;
+        // تمرير المنتجات المفروزة والمصنفة بذكاء ERO بدلاً من المخزن الشامل لحل مشكلة ظهور المواد الخام
+        return <Inventory {...props} categories={erpCategorizedStock.finished} rawCategories={erpCategorizedStock.raw} onSave={handleSavePurchase} onAddItem={(item) => setStock(prev => [...prev, item])} />;
       
       case 'Waste': 
         return <Waste {...props} onSaveWaste={(w) => setWaste(prev => [...prev, w])} />;
@@ -334,7 +357,16 @@ const App = () => {
         return <Settings {...props} />;
       
       default: 
-        return <Dashboard setActivePage={setActivePage} stats={financialStats} staffCount={staff.length} />;
+        return (
+          <Dashboard 
+            setActivePage={setActivePage} 
+            stats={financialStats} 
+            staffCount={staff.length} 
+            productionHistory={productionData}
+            stock={stock}
+            fetchData={downloadDataFromMaamoulCloud}
+          />
+        );
     }
   };
 
