@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CapacitorHttp } from '@capacitor/core';
 import Swal from 'sweetalert2';
 import {
@@ -16,13 +16,22 @@ const Dashboard = ({
   customersData = [], 
   suppliersData = [], 
   staffData = [],
-  productionHistory = [], // ممررة لدعم وظائف الإنتاج الجديدة
-  stock = [],             // ممررة لدعم وظائف المخزن الجديدة
-  fetchData,              // ممررة لدعم تحديث البيانات بعد الحذف
-  onDeleteItem           // ممررة لدعم عملية الحذف السحابي والمحلي
+  productionHistory = [], // ممررة لدعم وظائف الإنتاج
+  stock = [],             // ممررة لدعم وظائف المخزن
+  fetchData,              // دالة جلب وتحديث البيانات الرئيسية من App
+  onDeleteItem           // دالة الحذف السحابي والمحلي الموحدة
 }) => {
-  // الحفاظ على حالة التحميل الخاصة بالذكاء الاصطناعي من الكود الجديد
+  // حالة التحميل الخاصة بالذكاء الاصطناعي
   const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // ==========================================
+  // [تحديث مضاف ومصلح]: جلب وتحديث البيانات تلقائياً عند تحميل اللوحة
+  // ==========================================
+  useEffect(() => {
+    if (typeof fetchData === 'function') {
+      fetchData(); // تحديث فوري ومزامنة المؤشرات والبيانات السحابية والمحلية
+    }
+  }, []); // تعمل فور فتح الـ Dashboard مباشرة
 
   const sections = [
     { id: 'PurchasesManager', title: 'المشتريات', icon: <ShoppingCart size={28}/>, color: '#e67e22' },
@@ -41,7 +50,7 @@ const Dashboard = ({
   const s = stats || {};
 
   // ==========================================
-  // 1. وظيفة معالجة بيانات الرسم البياني (المستبدلة)
+  // 1. وظيفة معالجة بيانات الرسم البياني
   // ==========================================
   const chartData = useMemo(() => {
     if (!productionHistory || !Array.isArray(productionHistory)) return [];
@@ -53,7 +62,7 @@ const Dashboard = ({
   }, [productionHistory]);
 
   // ==========================================
-  // 2. وظيفة التقرير (المستبدلة)
+  // 2. وظيفة التقرير الفوري للوضع الحالي للمصنع
   // ==========================================
   const generateTodayReport = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -74,7 +83,7 @@ const Dashboard = ({
   };
 
   // ==========================================
-  // 3. وظيفة الذكاء الصناعي (المستبدلة)
+  // 3. وظيفة الذكاء الصناعي الاستشارية (AI Analysis)
   // ==========================================
   const analyzeWithAI = async () => {
     if (!productionHistory.length && !stock.length) {
@@ -95,20 +104,20 @@ const Dashboard = ({
       });
       Swal.fire({ title: '🤖 تحليل الذكاء الصناعي', text: response.data?.message || "مستقر", icon: 'success' });
     } catch (error) {
-      Swal.fire('عذراً', 'الذكاء الصناعي مشغول', 'error');
+      Swal.fire('عذراً', 'الذكاء الصناعي مشغول بالخلفية حالياً، يرجى المحاولة لاحقاً', 'error');
     } finally {
       setIsAiLoading(false);
     }
   };
 
   // ==========================================
-  // 4. دالة حذف الإنتاج المتصلة بالجدول السفلي المضاف
+  // 4. دالة حذف الإنتاج المتصلة بالجدول السفلي المضاف ومزامنة البيانات للـ App
   // ==========================================
   const handleDeleteProduction = async (id) => {
     if (!id) return;
     const result = await Swal.fire({
       title: 'تأكيد الحذف',
-      text: "هل تريد حذف سجل الإنتاج هذا نهائياً؟",
+      text: "هل تريد حذف سجل الإنتاج هذا نهائياً؟ سينعكس هذا على إحصائياتك مباشرة.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
@@ -121,6 +130,7 @@ const Dashboard = ({
       try {
         if (typeof onDeleteItem === 'function') {
            await onDeleteItem(id, 'production');
+           if (typeof fetchData === 'function') await fetchData(); // إعادة جلب وتأكيد صحة المزامنة لـ App
         } else {
            const response = await CapacitorHttp.post({
              url: `https://maamoul-one.vercel.app/api/production`, 
@@ -128,12 +138,12 @@ const Dashboard = ({
              data: { collectionName: 'production', id: id }
            });
            if (response.data && response.data.success) {
-             Swal.fire('تم الحذف', 'تم مسح السجل بنجاح', 'success');
-             if (fetchData) await fetchData();
+             Swal.fire('تم الحذف', 'تم مسح السجل بنجاح ومزامنة لوحة القيادة', 'success');
+             if (typeof fetchData === 'function') await fetchData();
            }
         }
       } catch (error) {
-        Swal.fire('خطأ', 'فشل الوصول للـ API', 'error');
+        Swal.fire('خطأ', 'فشل الوصول للـ API الخاص بالنظام', 'error');
       }
     }
   };
@@ -157,7 +167,7 @@ const Dashboard = ({
         <Settings size={120} style={{ position: 'absolute', left: '-20px', bottom: 0, opacity: 0.03, color: '#fff' }}/>
       </div>
 
-      {/* أزرار التحكم العلوي المستبدلة بالوظائف الجديدة مع الحفاظ على التصميم الأنيق */}
+      {/* أزرار التحكم العلوي للذكاء الاصطناعي والتقارير الفورية */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '20px' }}>
         <button 
           onClick={analyzeWithAI} 
@@ -185,7 +195,7 @@ const Dashboard = ({
         </button>
       </div>
 
-      {/* كروت كتل الإحصائيات الأربعة الثابتة بدون تغيير */}
+      {/* كروت كتل الإحصائيات الأربعة الرئيسية المحدثة لحظياً */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '20px' }}>
         {[
           { label: 'الإيرادات', value: s.totalIncome || 0, icon: <TrendingUp size={18} color="#2ecc71"/>, color: '#2ecc71' },
@@ -201,9 +211,7 @@ const Dashboard = ({
         ))}
       </div>
 
-      {/* ==========================================
-          5. حاوية الرسم البياني بالـ AreaChart الجديد
-         ========================================== */}
+      {/* حاوية الرسم البياني - منحنى الإنتاج الفعلي */}
       <div style={{ backgroundColor: '#fff', borderRadius: '24px', padding: '20px', marginBottom: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.02)' }}>
         <h3 style={{ fontSize: '15px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b', fontWeight: 'bold' }}>
           <TrendingUp size={18} color="#e67e22" /> منحنى الإنتاج الفعلي
@@ -220,7 +228,7 @@ const Dashboard = ({
         </div>
       </div>
 
-      {/* أزرار الموديولات والأقسام الرئيسية بدون أي تغيير */}
+      {/* أزرار الموديولات والأقسام الرئيسية للتنقل داخل التطبيق */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginBottom: '20px' }}>
         {sections.map((sec) => (
           <div
@@ -242,9 +250,7 @@ const Dashboard = ({
         ))}
       </div>
 
-      {/* ==========================================
-          6. وظيفة جدول عرض وحذف الإنتاج الكامل (أسفل الشاشة)
-         ========================================== */}
+      {/* سجل الإنتاج الكامل وإمكانية إدارة الحذف الحية */}
       <div style={{ backgroundColor: '#fff', borderRadius: '24px', padding: '20px', marginBottom: '20px', boxShadow: '0 10px 25px rgba(0,0,0,0.02)' }}>
         <h3 style={{ fontSize: '15px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b', fontWeight: 'bold' }}>
           <Calendar size={18} color="#3498db" /> سجل الإنتاج الكامل
@@ -297,7 +303,7 @@ const Dashboard = ({
         </div>
       </div>
 
-      {/* زر الإعدادات السفلي كما هو */}
+      {/* زر الإعدادات السفلي ومزامنة التخزين */}
       <div onClick={() => setActivePage('Settings')} style={{ backgroundColor: '#fff', borderRadius: '16px', marginTop: '20px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', cursor: 'pointer', color: '#64748b', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
         <Settings size={20}/> إعدادات nawah.ai والنسخ الاحتياطي للمحرك
       </div>
