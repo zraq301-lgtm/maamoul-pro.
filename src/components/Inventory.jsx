@@ -1,42 +1,28 @@
 import React, { useState } from 'react';
 import { Package, Truck, Archive } from 'lucide-react';
 
-// استيراد الصفحات الثلاث
-import RawMaterials from './Page/RawMaterials';
-import SupplyEntry from './Page/SupplyEntry';
-import FinishedProducts from './Page/FinishedProducts';
+import RawMaterials from './page/RawMaterials';
+import SupplyEntry from './page/SupplyEntry';
+import FinishedProducts from './page/FinishedProducts';
 
-const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
-  // الحالة المسؤولة عن تحديد أي واجهة تظهر الآن
+// تم إضافة onSaveFinishedProduct لاستلام دالة حفظ المنتج النهائي من المحرك الرئيسي
+const Inventory = ({ stock = [], onDeleteItem, onInventoryEntry, onSaveFinishedProduct }) => {
   const [activeTab, setActiveTab] = useState('raw');
+
+  // ضمان أننا نتعامل مع مصفوفة دائماً لتجنب أي توقف في التطبيق
+  const dataList = Array.isArray(stock) ? stock : [];
 
   const styles = {
     container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
     tabContainer: { 
-      display: 'flex', 
-      background: '#fff', 
-      borderRadius: '20px', 
-      padding: '8px', 
-      marginBottom: '20px', 
-      boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
-      position: 'sticky',
-      top: '10px',
-      zIndex: 10
+      display: 'flex', background: '#fff', borderRadius: '20px', padding: '8px', 
+      marginBottom: '20px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)',
+      position: 'sticky', top: '10px', zIndex: 10
     },
     tab: { 
-      flex: 1, 
-      padding: '12px', 
-      textAlign: 'center', 
-      borderRadius: '15px', 
-      cursor: 'pointer', 
-      transition: '0.3s', 
-      fontWeight: 'bold', 
-      color: '#64748b',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '8px',
-      fontSize: '14px'
+      flex: 1, padding: '12px', textAlign: 'center', borderRadius: '15px', 
+      cursor: 'pointer', transition: '0.3s', fontWeight: 'bold', color: '#64748b',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '14px'
     },
     activeTab: { background: '#22c55e', color: '#fff' },
     contentArea: { marginTop: '10px' }
@@ -44,7 +30,7 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
 
   return (
     <div style={styles.container}>
-      {/* شريط التنقل */}
+      {/* شريط التنقل العلوي - التبديل بين الخامات، التوريد، والمنتجات */}
       <div style={styles.tabContainer}>
         <div 
           style={{...styles.tab, ...(activeTab === 'raw' ? styles.activeTab : {})}} 
@@ -66,34 +52,31 @@ const Inventory = ({ categories = [], onDeleteItem, onInventoryEntry }) => {
         </div>
       </div>
 
-      {/* منطقة عرض المحتوى */}
       <div style={styles.contentArea}>
-        
-        {/* واجهة الخامات */}
+        {/* 1. واجهة الخامات - تمرير بيانات المخزن ودالة الحذف */}
         {activeTab === 'raw' && (
           <RawMaterials 
-            categories={categories} 
+            categories={dataList} 
             onDeleteItem={onDeleteItem} 
           />
         )}
 
-        {/* واجهة تسجيل التوريد */}
+        {/* 2. واجهة تسجيل التوريد - تمرير دالة الحفظ لزيادة المخزن */}
         {activeTab === 'supply' && (
           <SupplyEntry 
-            // التأكد من تمرير الدالة هنا
             onInventoryEntry={onInventoryEntry} 
-            categories={categories} 
+            categories={dataList} 
           />
         )}
 
-        {/* واجهة المنتجات النهائية */}
+        {/* 3. واجهة المنتجات النهائية - تم تمرير دالة الحفظ المخصصة للمنتج النهائي الجديد هنا */}
         {activeTab === 'finished' && (
           <FinishedProducts 
-            categories={categories} 
+            categories={dataList} 
             onDeleteItem={onDeleteItem} 
+            onSaveFinishedProduct={onSaveFinishedProduct} /* تمرير الدالة هنا للحفظ بالاسم من وإلى الصفحة */
           />
         )}
-
       </div>
     </div>
   );
