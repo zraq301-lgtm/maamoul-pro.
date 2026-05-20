@@ -6,11 +6,22 @@ import RawMaterials from './Page/RawMaterials';
 import SupplyEntry from './Page/SupplyEntry';
 import FinishedProducts from './Page/FinishedProducts';
 
-const Inventory = ({ stock = [], onDeleteItem, onInventoryEntry, onSaveFinishedProduct }) => {
+// تم إضافة استقبال onSave و onAddItem لضمان الربط المباشر والصحيح مع دالة الحفظ بالأب
+const Inventory = ({ 
+  stock = [], 
+  onDeleteItem, 
+  onInventoryEntry, 
+  onSaveFinishedProduct, 
+  onSave, 
+  onAddItem 
+}) => {
   const [activeTab, setActiveTab] = useState('raw');
 
   // ضمان أننا نتعامل مع مصفوفة دائماً لتجنب أي توقف في التطبيق
   const dataList = Array.isArray(stock) ? stock : [];
+
+  // دالة ذكية لتحديد محرك الحفظ القادم من الأب وتجنب خطأ "غير معرفة"
+  const handleSupplySave = onInventoryEntry || onSave || onAddItem;
 
   const styles = {
     container: { padding: '15px', direction: 'rtl', backgroundColor: '#f0f4f8', minHeight: '100vh' },
@@ -61,10 +72,10 @@ const Inventory = ({ stock = [], onDeleteItem, onInventoryEntry, onSaveFinishedP
           />
         )}
 
-        {/* 2. واجهة تسجيل التوريد - تمرير دالة الحفظ لزيادة المخزن */}
+        {/* 2. واجهة تسجيل التوريد - تمرير دالة الحفظ المضمونة والمربوطة بالأب مباشرة */}
         {activeTab === 'supply' && (
           <SupplyEntry 
-            onInventoryEntry={onInventoryEntry} 
+            onInventoryEntry={handleSupplySave} 
             categories={dataList} 
           />
         )}
