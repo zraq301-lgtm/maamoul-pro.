@@ -3,7 +3,7 @@ import clientPromise from "../lib/mongodb.js";
 export default async function handler(request, response) {
   // 1. إعدادات CORS الشاملة
   response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); // السماح بـ POST للحذف لضمان التوافق
+  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS'); 
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   // معالجة طلب OPTIONS (Preflight request)
@@ -11,13 +11,18 @@ export default async function handler(request, response) {
     return response.status(200).end();
   }
 
-  // 2. السماح بـ POST لأن CapacitorHttp يرسل البيانات في الـ Body بشكل أفضل عبر POST
+  // طباعة نوع الطلب في الـ Terminal للمساعدة في التتبع
+  console.log(`الميثود المستلمة هي: ${request.method}`);
+
+  // 2. التحقق من الـ Method
   if (request.method !== 'POST') {
-    return response.status(405).json({ error: 'الرجاء استخدام POST لإتمام عملية الحذف' });
+    return response.status(405).json({ 
+      error: `الرجاء استخدام POST لإتمام عملية الحذف. الميثود الحالية المستخدمة هي: ${request.method}` 
+    });
   }
 
   try {
-    // 3. استلام البيانات من Body (أكثر أماناً واحترافية)
+    // 3. استلام البيانات من Body
     const { collectionName, id } = request.body;
 
     if (!collectionName || !id) {
@@ -25,15 +30,16 @@ export default async function handler(request, response) {
     }
 
     const client = await clientPromise;
-    // تم ضبط الاتصال ليعتمد مباشرة على متغير البيئة MONGODB_URI المرتبط بقاعدة البيانات الخاصة بك
-    const db = client.db(process.env.MONGODB_URI);
+    
+    // تصحيح: استدعاء قاعدة البيانات الافتراضية المحددة في الرابط بدون تمرير الـ URI كاملاً
+    const db = client.db(); 
 
     // 4. محاولة الحذف الذكي (نصوص أو أرقام)
     const query = {
       $or: [
         { id: id },
         { id: isNaN(id) ? id : parseInt(id) },
-        { _id: id } // دعم إضافي في حال كان الحذف عبر الـ _id الخاص بمونجو
+        { _id: id } 
       ]
     };
 
