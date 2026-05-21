@@ -14,7 +14,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     date: new Date().toISOString().split('T')[0],
     shift: 'الأولى',
     ingredients: dynamicIngredients, // استخدام الخامات الديناميكية القادمة من المخزن
-    products: [{ name: 'معمول جاهز', quantity: 0 }],
+    products: [{ name: '', quantity: 0 }],
     wasteQty: 0
   });
 
@@ -223,32 +223,48 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         </div>
 
         {formData.products.map((prod, index) => (
-          <div key={index} style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '15px', backgroundColor: '#2d3a4f', padding: '15px', borderRadius: '15px' }}>
+          <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px', backgroundColor: '#2d3a4f', padding: '15px', borderRadius: '15px' }}>
             
-            {/* سهم لاختيار كلمة منتج نهائي مثبتة */}
-            <div style={{ width: '150px' }}>
-              <select style={{ ...inputStyle, background: '#1e293b', color: '#fff', paddingRight: '5px', paddingLeft: '5px' }}>
-                <option value="منتج نهائي">منتج نهائي</option>
+            {/* 1. السهم لاختيار كلمة (منتج جاهز) مثبتة في الأعلى بملء العرض */}
+            <div style={{ width: '100%' }}>
+              <select style={{ ...inputStyle, background: '#1e293b', color: '#fff', textAlign: 'right' }}>
+                <option value="منتج جاهز">منتج جاهز</option>
               </select>
             </div>
 
-            {/* إمكانية كتابة اسم المنتج وتخزينه في الـ name الأصلي للكود بدون تعديل المنطق */}
-            <div style={{ flex: 2 }}>
-              <input 
-                type="text" 
-                value={prod.name} 
-                placeholder="اكتب اسم المنتج النهائي هنا" 
-                onChange={(e) => handleChange(e, 'products', 'name', index)} 
-                style={{ ...inputStyle, background: '#1e293b', color: '#fff', textAlign: 'right' }} 
-              />
+            {/* صف يحتوي على خانة الاسم وخانة الكمية وزر الحذف تحت كلمة منتج جاهز */}
+            <div style={{ display: 'flex', gap: '10px', width: '100%', alignItems: 'center' }}>
+              
+              {/* 2. خانة كتابة اسم المنتج بجانبها */}
+              <div style={{ flex: 2 }}>
+                <input 
+                  type="text" 
+                  value={prod.name} 
+                  placeholder="اكتب اسم المنتج" 
+                  onChange={(e) => handleChange(e, 'products', 'name', index)} 
+                  style={{ ...inputStyle, background: '#1e293b', color: '#fff', textAlign: 'right' }} 
+                />
+              </div>
+
+              {/* 3. حقل الكمية بالكرتونة */}
+              <div style={{ flex: 1 }}>
+                <input 
+                  type="number" 
+                  value={prod.quantity || ''} 
+                  onChange={(e) => handleChange(e, 'products', 'quantity', index)} 
+                  placeholder="الكمية" 
+                  style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} 
+                />
+              </div>
+
+              {/* زر حذف الخانة بالكامل إذا تعدت الخانة الأولى */}
+              {index > 0 && (
+                <button onClick={() => removeProductField(index)} style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '12px', borderRadius: '12px' }}>
+                  <Trash2 size={20} />
+                </button>
+              )}
             </div>
 
-            {/* حقل الكمية الأصلي */}
-            <div style={{ flex: 1 }}>
-              <input type="number" value={prod.quantity || ''} onChange={(e) => handleChange(e, 'products', 'quantity', index)} placeholder="0" style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} />
-            </div>
-
-            {index > 0 && <button onClick={() => removeProductField(index)} style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '10px', borderRadius: '10px' }}><Trash2 size={20} /></button>}
           </div>
         ))}
 
