@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Save, ArrowLeft, AlertTriangle, Box, Info, Calendar, Clock, Plus, Trash2, Layers, Zap } from 'lucide-react';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, setStock }) => {
-  // تصفية المخزن للحصول على الخامات فقط بناءً على القسم الخاص بها
-  const rawMaterials = (stock || []).filter(item => item.category === 'مواد خام' || item.category === 'خامات');
+  // تم تعديل هذا السطر ليجلب كل العناصر الموجودة بالمخزن مباشرة دون التقيد بتصنيف محدد
+  const rawMaterials = stock || [];
 
   // حالة لتخزين كائن المدخلات الخاص بالخامات لتجنب فقدان التركيز (Focus) أثناء الكتابة
   const [ingredientsInputs, setIngredientsInputs] = useState({});
@@ -133,14 +133,14 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         productInStock.batches.push(newBatch);
         productInStock.balance = (productInStock.balance || 0) + parseFloat(prod.quantity);
         productInStock.price = costPerCarton; // تحديث السعر لآخر تكلفة إنتاج
-        productInStock.category = 'منتجات'; // التأكد من إرسال وتحديث المنتج في قسم المنتجات بالمخازن
+        productInStock.category = 'منتجات'; 
       } else {
         updatedStock.push({
           id: Date.now() + Math.random(),
           name: prod.name,
           balance: parseFloat(prod.quantity),
           unit: 'كرتونة',
-          category: 'منتجات', // إضافة المنتج الجديد مباشرة لقسم المنتجات بالمخازن وليس المواد الخام
+          category: 'منتجات', 
           batches: [newBatch],
           price: costPerCarton
         });
@@ -215,24 +215,30 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
-          {rawMaterials.map(item => {
-            if (!item.name) return null;
-            const ing = item.name.trim();
-            const balance = item.balance || 0;
-            return (
-              <div key={ing} style={{ background: '#f8fafc', padding: '15px', borderRadius: '18px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '8px' }}>{ing}</div>
-                <input 
-                  type="number" 
-                  value={ingredientsInputs[ing] || ''} 
-                  placeholder="0" 
-                  onChange={(e) => handleChange(e, 'ingredients', ing)} 
-                  style={inputStyle} 
-                />
-                <div style={{ fontSize: '12px', marginTop: '8px', color: balance > 0 ? '#10b981' : '#ef4444' }}>المتوفر: {balance}</div>
-              </div>
-            );
-          })}
+          {rawMaterials.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#94a3b8', padding: '10px', fontSize: '16px' }}>
+              المخزن فارغ تماماً، يرجى إضافة عناصر أولاً.
+            </div>
+          ) : (
+            rawMaterials.map(item => {
+              if (!item.name) return null;
+              const ing = item.name.trim();
+              const balance = item.balance || 0;
+              return (
+                <div key={ing} style={{ background: '#f8fafc', padding: '15px', borderRadius: '18px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '8px' }}>{ing}</div>
+                  <input 
+                    type="number" 
+                    value={ingredientsInputs[ing] || ''} 
+                    placeholder="0" 
+                    onChange={(e) => handleChange(e, 'ingredients', ing)} 
+                    style={inputStyle} 
+                  />
+                  <div style={{ fontSize: '12px', marginTop: '8px', color: balance > 0 ? '#10b981' : '#ef4444' }}>المتوفر: {balance}</div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
