@@ -1,17 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Factory, Save, ArrowLeft, AlertTriangle, Box, Info, Calendar, Clock, Plus, Trash2, Layers, Zap } from 'lucide-react';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, setStock }) => {
+  // تحضير الخامات ديناميكياً من المخزن الممرر لتجنب التقييد بمنتجات مسبقة
+  const initialIngredients = {};
+  stock.forEach(item => {
+    if (item.name) {
+      initialIngredients[item.name.trim()] = 0;
+    }
+  });
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     shift: 'الأولى',
-    ingredients: {
-      دقيق: 0, سكر: 0, عجوة: 0, سمنة: 0, زبدة: 0, 
-      سولار: 0, كهرباء: 0, لبن: 0, كارتون: 0, تغليف: 0
-    },
-    products: [{ name: 'معمول جاهز', quantity: 0 }],
+    ingredients: initialIngredients,
+    products: [{ name: 'منتج نهائي', quantity: 0 }],
     wasteQty: 0
   });
+
+  // تحديث الخامات إذا تغير المخزن القادم من الأب لضمان ظهور أي خامة جديدة فوراً
+  useEffect(() => {
+    const updatedIngredients = { ...formData.ingredients };
+    stock.forEach(item => {
+      if (item.name && updatedIngredients[item.name.trim()] === undefined) {
+        updatedIngredients[item.name.trim()] = 0;
+      }
+    });
+    setFormData(prev => ({ ...prev, ingredients: updatedIngredients }));
+  }, [stock]);
 
   const shifts = ['الأولى', 'الثانية', 'السهرة', 'إضافي'];
 
@@ -35,7 +51,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
   const addProductField = () => {
     setFormData(prev => ({
       ...prev,
-      products: [...prev.products, { name: '', quantity: 0 }]
+      products: [...prev.products, { name: 'منتج نهائي', quantity: 0 }]
     }));
   };
 
@@ -51,10 +67,9 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     }
 
     let totalActualCost = 0;
-    // أخذ نسخة عميقة من المخزن للعمل عليها
     const updatedStock = JSON.parse(JSON.stringify(stock || []));
 
-    // --- منطق خصم الخامات (النقص من المخزن) ---
+    // --- منطق خصم الخامات من المخزن ديناميكياً ---
     for (const [ingName, requiredQty] of Object.entries(formData.ingredients)) {
       if (requiredQty <= 0) continue;
       
@@ -68,7 +83,6 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
 
       let remainingToWithdraw = requiredQty;
       
-      // الخصم من الدفعات (Batches) لضمان دقة التكلفة والرصيد
       if (!stockItem.batches || stockItem.batches.length === 0) {
         totalActualCost += (requiredQty * (stockItem.price || 0));
         stockItem.balance = (stockItem.balance || 0) - requiredQty;
@@ -85,7 +99,6 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
             remainingToWithdraw = 0;
           }
         }
-        // تحديث الرصيد الإجمالي بناءً على المتبقي في الدفعات
         stockItem.balance = stockItem.batches.reduce((sum, b) => sum + b.quantity, 0);
       }
     }
@@ -114,7 +127,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         if (!productInStock.batches) productInStock.batches = [];
         productInStock.batches.push(newBatch);
         productInStock.balance = (productInStock.balance || 0) + parseFloat(prod.quantity);
-        productInStock.price = costPerCarton; // تحديث السعر لآخر تكلفة إنتاج
+        productInStock.price = costPerCarton;
       } else {
         updatedStock.push({
           id: Date.now() + Math.random(),
@@ -127,10 +140,8 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
       }
     });
 
-    // تحديث المخزن في الأب (هذا السطر هو المسؤول عن النقص الفعلي في الشاشات الأخرى)
     setStock(updatedStock);
     
-    // حفظ السجل التاريخي
     onSaveProduction({ 
       ...formData, 
       id: Date.now(),
@@ -218,10 +229,38 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         </div>
 
         {formData.products.map((prod, index) => (
-          <div key={index} style={{ display: 'flex', gap: '15px', marginBottom: '15px', backgroundColor: '#2d3a4f', padding: '15px', borderRadius: '15px' }}>
-            <input type="text" value={prod.name} onChange={(e) => handleChange(e, 'products', 'name', index)} style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} />
-            <input type="number" value={prod.quantity || ''} onChange={(e) => handleChange(e, 'products', 'quantity', index)} placeholder="0" style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} />
-            {index > 0 && <button onClick={() => removeProductField(index)} style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '10px', borderRadius: '10px' }}><Trash2 size={20} /></button>}
+          <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '15px', backgroundColor: '#2d3a4f', padding: '15px', borderRadius: '15px' }}>
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+              
+              {/* قائمة منسدلة مثبت فيها كلمة منتج نهائي */}
+              <div style={{ flex: 1 }}>
+                <select style={{ ...inputStyle, background: '#1e293b', color: '#fff', textAlign: 'right' }}>
+                  <option value="منتج نهائي">منتج نهائي</option>
+                </select>
+              </div>
+
+              {/* حقل مخصص لكتابة اسم المنتج بجانبه بحرية */}
+              <div style={{ flex: 2 }}>
+                <input 
+                  type="text" 
+                  value={prod.name} 
+                  placeholder="اكتب اسم المنتج هنا..." 
+                  onChange={(e) => handleChange(e, 'products', 'name', index)} 
+                  style={{ ...inputStyle, background: '#1e293b', color: '#fff', textAlign: 'right' }} 
+                />
+              </div>
+
+              {/* حقل الكمية بالكرتونة */}
+              <div style={{ flex: 1 }}>
+                <input type="number" value={prod.quantity || ''} onChange={(e) => handleChange(e, 'products', 'quantity', index)} placeholder="الكمية" style={{ ...inputStyle, background: '#1e293b', color: '#fff' }} />
+              </div>
+
+              {index > 0 && (
+                <button onClick={() => removeProductField(index)} style={{ background: '#ef4444', border: 'none', color: '#fff', padding: '12px', borderRadius: '10px' }}>
+                  <Trash2 size={20} />
+                </button>
+              )}
+            </div>
           </div>
         ))}
 
