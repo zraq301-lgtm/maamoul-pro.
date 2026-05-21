@@ -20,15 +20,28 @@ const Inventory = ({
   // ضمان أننا نتعامل مع مصفوفة دائماً لتجنب أي توقف في التطبيق
   const dataList = Array.isArray(stock) ? stock : [];
 
-  // 🧠 منطق فرع وتوزيع الذكاء الاصطناعي لفصل الخامات عن المنتجات النهائية بناءً على مسميات الصورة
-  const rawMaterialsData = dataList.filter(item => {
-    const name = (item.name || '').toString();
-    return !name.includes('نهائي') && !name.includes('جاهز');
-  });
-
+  // 🧠 منطق الفرز المعدل: تمرير أي منتج يخص قسم الإنتاج مهما كان اسمه إلى قسم المنتجات
   const finishedProductsData = dataList.filter(item => {
     const name = (item.name || '').toString();
-    return name.includes('نهائي') || name.includes('جاهز');
+    const department = (item.department || item.source || '').toString();
+    
+    // شرط قسم الإنتاج: إذا كان المنتج قادماً من قسم الإنتاج أو يحتوي الاسم على كلمة إنتاج
+    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج');
+    // الشروط القديمة بناءً على الاسم
+    const isFinishedName = name.includes('نهائي') || name.includes('جاهز');
+    
+    return isFromProduction || isFinishedName;
+  });
+
+  // الخامات: هي العناصر التي لا تنطبق عليها شروط المنتجات النهائية
+  const rawMaterialsData = dataList.filter(item => {
+    const name = (item.name || '').toString();
+    const department = (item.department || item.source || '').toString();
+    
+    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج');
+    const isFinishedName = name.includes('نهائي') || name.includes('جاهز');
+    
+    return !(isFromProduction || isFinishedName);
   });
 
   // دالة ذكية لتحديد محرك الحفظ القادم من الأب وتجنب خطأ "غير معرفة"
