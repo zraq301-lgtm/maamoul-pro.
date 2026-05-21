@@ -5,36 +5,30 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
   // تصفية المخزن للحصول على الخامات فقط بناءً على القسم الخاص بها
   const rawMaterials = (stock || []).filter(item => item.category === 'مواد خام' || item.category === 'خامات');
 
-  // إنشاء كائن الخامات ديناميكياً من المخزن بدلاً من الأسماء الثابتة
-  const initialIngredients = rawMaterials.reduce((acc, item) => {
-    if (item.name) {
-      acc[item.name.trim()] = 0;
-    }
-    return acc;
-  }, {});
+  // حالة لتخزين كائن المدخلات الخاص بالخامات لتجنب فقدان التركيز (Focus) أثناء الكتابة
+  const [ingredientsInputs, setIngredientsInputs] = useState({});
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     shift: 'الأولى',
-    ingredients: initialIngredients,
     products: [{ name: '', quantity: 0 }],
     wasteQty: 0
   });
 
-  // تحديث الخامات في حالة تغير المخزن القادم من الأب
+  // مزامنة كميات الخامات من المخزن دون تصفير القيم التي يكتبها المستخدم
   useEffect(() => {
-    const updatedIngredients = rawMaterials.reduce((acc, item) => {
-      if (item.name) {
-        const trimmedName = item.name.trim();
-        acc[trimmedName] = formData.ingredients[trimmedName] || 0;
-      }
-      return acc;
-    }, {});
-    
-    setFormData(prev => ({
-      ...prev,
-      ingredients: updatedIngredients
-    }));
+    setIngredientsInputs(prev => {
+      const updated = { ...prev };
+      rawMaterials.forEach(item => {
+        if (item.name) {
+          const trimmedName = item.name.trim();
+          if (updated[trimmedName] === undefined) {
+            updated[trimmedName] = 0;
+          }
+        }
+      });
+      return updated;
+    });
   }, [stock]);
 
   const shifts = ['الأولى', 'الثانية', 'السهرة', 'إضافي'];
@@ -43,9 +37,9 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     const value = e.target.type === 'number' ? (e.target.value === '' ? 0 : parseFloat(e.target.value)) : e.target.value;
     
     if (category === 'ingredients') {
-      setFormData(prev => ({ 
-        ...prev, 
-        ingredients: { ...prev.ingredients, [field]: value } 
+      setIngredientsInputs(prev => ({
+        ...prev,
+        [field]: value
       }));
     } else if (category === 'products') {
       const updatedProducts = [...formData.products];
@@ -79,7 +73,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     const updatedStock = JSON.parse(JSON.stringify(stock || []));
 
     // --- منطق خصم الخامات (النقص من المخزن) ---
-    for (const [ingName, requiredQty] of Object.entries(formData.ingredients)) {
+    for (const [ingName, requiredQty] of Object.entries(ingredientsInputs)) {
       if (requiredQty <= 0) continue;
       
       const stockItem = updatedStock.find(s => s.name && s.name.trim() === ingName.trim());
@@ -153,12 +147,13 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
       }
     });
 
-    // تحديث المخزن في الأب (هذا السطر هو المسؤول عن النقص الفعلي في الشاشات الأخرى)
+    // تحديث المخزن في الأب
     setStock(updatedStock);
     
     // حفظ السجل التاريخي
     onSaveProduction({ 
       ...formData, 
+      ingredients: ingredientsInputs,
       id: Date.now(),
       totalActualCost: totalActualCost.toFixed(2),
       actualUnitCost: costPerCarton.toFixed(2),
@@ -220,13 +215,20 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         </div>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
-          {Object.keys(formData.ingredients).map(ing => {
-            const itemInStock = (stock || []).find(s => s.name && s.name.trim() === ing.trim());
-            const balance = itemInStock ? itemInStock.balance : 0;
+          {rawMaterials.map(item => {
+            if (!item.name) return null;
+            const ing = item.name.trim();
+            const balance = item.balance || 0;
             return (
               <div key={ing} style={{ background: '#f8fafc', padding: '15px', borderRadius: '18px', border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: '15px', fontWeight: 'bold', marginBottom: '8px' }}>{ing}</div>
-                <input type="number" value={formData.ingredients[ing] || ''} placeholder="0" onChange={(e) => handleChange(e, 'ingredients', ing)} style={inputStyle} />
+                <input 
+                  type="number" 
+                  value={ingredientsInputs[ing] || ''} 
+                  placeholder="0" 
+                  onChange={(e) => handleChange(e, 'ingredients', ing)} 
+                  style={inputStyle} 
+                />
                 <div style={{ fontSize: '12px', marginTop: '8px', color: balance > 0 ? '#10b981' : '#ef4444' }}>المتوفر: {balance}</div>
               </div>
             );
