@@ -20,6 +20,17 @@ const Inventory = ({
   // ضمان أننا نتعامل مع مصفوفة دائماً لتجنب أي توقف في التطبيق
   const dataList = Array.isArray(stock) ? stock : [];
 
+  // 🧠 منطق فرع وتوزيع الذكاء الاصطناعي لفصل الخامات عن المنتجات النهائية بناءً على مسميات الصورة
+  const rawMaterialsData = dataList.filter(item => {
+    const name = (item.name || '').toString();
+    return !name.includes('نهائي') && !name.includes('جاهز');
+  });
+
+  const finishedProductsData = dataList.filter(item => {
+    const name = (item.name || '').toString();
+    return name.includes('نهائي') || name.includes('جاهز');
+  });
+
   // دالة ذكية لتحديد محرك الحفظ القادم من الأب وتجنب خطأ "غير معرفة"
   const handleSupplySave = onInventoryEntry || onSave || onAddItem;
 
@@ -64,15 +75,15 @@ const Inventory = ({
       </div>
 
       <div style={styles.contentArea}>
-        {/* 1. واجهة الخامات - تمرير بيانات المخزن ودالة الحذف */}
+        {/* 1. واجهة الخامات - تمرير بيانات الخامات المصفاة فقط ودالة الحذف */}
         {activeTab === 'raw' && (
           <RawMaterials 
-            categories={dataList} 
+            categories={rawMaterialsData} 
             onDeleteItem={onDeleteItem} 
           />
         )}
 
-        {/* 2. واجهة تسجيل التوريد - تمرير دالة الحفظ المضمونة والمربوطة بالأب مباشرة */}
+        {/* 2. واجهة تسجيل التوريد - تمرير القائمة الكاملة لتحديد مادة التوريد */}
         {activeTab === 'supply' && (
           <SupplyEntry 
             onInventoryEntry={handleSupplySave} 
@@ -80,10 +91,10 @@ const Inventory = ({
           />
         )}
 
-        {/* 3. واجهة المنتجات النهائية - تم تمرير دالة الحفظ المخصصة للمنتج النهائي الجديد هنا */}
+        {/* 3. واجهة المنتجات النهائية - تمرير المنتجات المصفاة فقط */}
         {activeTab === 'finished' && (
           <FinishedProducts 
-            categories={dataList} 
+            categories={finishedProductsData} 
             onDeleteItem={onDeleteItem} 
             onSaveFinishedProduct={onSaveFinishedProduct} 
           />
