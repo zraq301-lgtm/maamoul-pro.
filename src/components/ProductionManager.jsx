@@ -2,8 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Save, ArrowLeft, AlertTriangle, Box, Info, Calendar, Clock, Plus, Trash2, Layers, Zap } from 'lucide-react';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, setStock }) => {
-  // تم تعديل هذا السطر ليجلب كل العناصر الموجودة بالمخزن مباشرة دون التقيد بتصنيف محدد
-  const rawMaterials = stock || [];
+  // تطبيق نفس منطق صفحة الخامات (استبعاد الكلمات "معمول" أو "جاهز") لضمان تطابق البيانات تماماً
+  const rawMaterials = (stock || []).filter(item => {
+    if (!item.name) return false;
+    const name = item.name.toLowerCase();
+    return !(name.includes("معمول") || name.includes("جاهز"));
+  });
 
   // حالة لتخزين كائن المدخلات الخاص بالخامات لتجنب فقدان التركيز (Focus) أثناء الكتابة
   const [ingredientsInputs, setIngredientsInputs] = useState({});
@@ -217,7 +221,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
           {rawMaterials.length === 0 ? (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#94a3b8', padding: '10px', fontSize: '16px' }}>
-              المخزن فارغ تماماً، يرجى إضافة عناصر أولاً.
+              لا توجد خامات متوفرة حالياً
             </div>
           ) : (
             rawMaterials.map(item => {
