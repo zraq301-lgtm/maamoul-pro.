@@ -75,6 +75,9 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     let totalActualCost = 0;
     // أخذ نسخة عميقة من المخزن للعمل عليها
     const updatedStock = JSON.parse(JSON.stringify(stock || []));
+    
+    // كائن جديد لتسجيل الخامات المستهلكة فعلياً فقط (أكبر من 0) لحفظها في السجل التاريخي
+    const actualConsumedIngredients = {};
 
     // --- منطق خصم الخامات (النقص من المخزن) ---
     for (const [ingName, requiredQty] of Object.entries(ingredientsInputs)) {
@@ -87,6 +90,9 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         alert(`⚠️ عجز في مادة: ${ingName}\nالمطلوب: ${requiredQty}\nالمتوفر: ${totalAvailable}`);
         return;
       }
+
+      // إضافة المادة المستهلكة فعلياً للكائن المصفى لترحيلها للسجل التاريخي
+      actualConsumedIngredients[ingName] = requiredQty;
 
       let remainingToWithdraw = requiredQty;
       
@@ -151,13 +157,13 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
       }
     });
 
-    // تحديث المخزن في الأب
+    // تحديث المخزن الرئيسي الفعلي في مكون الأب بالكميات المخصومة والمضافة الجديدة
     setStock(updatedStock);
     
-    // حفظ السجل التاريخي
+    // حفظ السجل التاريخي بالخامات المسحوبة فعلياً فقط بدلاً من إرسال كل الخامات الصفريّة
     onSaveProduction({ 
       ...formData, 
-      ingredients: ingredientsInputs,
+      ingredients: actualConsumedIngredients, // هنا تم تمرير المستهلك الفعلي فقط
       id: Date.now(),
       totalActualCost: totalActualCost.toFixed(2),
       actualUnitCost: costPerCarton.toFixed(2),
@@ -175,7 +181,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
       });
     }
 
-    alert(`✅ تم الإنتاج بنجاح!\n1. تم خصم الخامات من المخزن\n2. تم إضافة المنتج الجاهز لقسم المنتجات بالمخزن\n3. التكلفة الإجمالية: ${totalActualCost.toFixed(2)} ج.م`);
+    alert(`✅ تم الإنتاج بنجاح!\n1. تم خصم الخامات من المخزن الفعلي\n2. تم إضافة المنتج الجاهز لقسم المنتجات بالمخزن\n3. التكلفة الإجمالية: ${totalActualCost.toFixed(2)} ج.م`);
     if (onBack) onBack();
   };
 
