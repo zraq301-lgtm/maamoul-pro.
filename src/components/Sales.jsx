@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { Tag, User, Hash, DollarSign, Save, ArrowRight, ClipboardList, AlertCircle } from 'lucide-react';
+// استيراد الأيقونات بشكل مباشر لمنع توقف الـ Actions وتوفير استهلاك الذاكرة
+import Tag from 'lucide-react/dist/esm/icons/tag';
+import User from 'lucide-react/dist/esm/icons/user';
+import Hash from 'lucide-react/dist/esm/icons/hash';
+import DollarSign from 'lucide-react/dist/esm/icons/dollar-sign';
+import Save from 'lucide-react/dist/esm/icons/save';
+import ArrowRight from 'lucide-react/dist/esm/icons/arrow-right';
+import ClipboardList from 'lucide-react/dist/esm/icons/clipboard-list';
+import AlertCircle from 'lucide-react/dist/esm/icons/alert-circle';
 
 const Sales = ({ onBack, onSaveSale, customers = [], stock = [] }) => {
   const [sale, setSale] = useState({ customerName: '', productName: '', quantity: '', pricePerUnit: '', date: new Date().toISOString().split('T')[0] });
