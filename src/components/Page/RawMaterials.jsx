@@ -1,31 +1,37 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
 
-const RawMaterials = ({ categories, onDeleteItem }) => {
-  // تصفية الخامات فقط
-  const rawData = categories.filter(item => {
-    const name = (item.name || '').toLowerCase();
-    return !(name.includes("معمول") || name.includes("جاهز"));
-  });
+const RawMaterials = ({ categories = [], onDeleteItem }) => {
+  // الاعتماد على التصفية الذكية الممررة مباشرة من المخزن لضمان عرض الرصيد المخصوم فعلياً
+  const rawData = categories;
 
   return (
     <div style={{ padding: '10px' }}>
       {rawData.length > 0 ? rawData.map(item => (
-        <div key={item.id} style={cardStyle}>
+        <div key={item.id || item.name} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h3 style={{ margin: 0 }}>{item.name}</h3>
-            <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} />
+            {onDeleteItem && (
+              <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} style={{ cursor: 'pointer' }} />
+            )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#666' }}>
-            <span>الرصيد: <b>{item.balance}</b></span>
-            <span>السعر: <b>{item.price}</b></span>
+            {/* هنا يظهر الرصيد الفعلي المخصوم بعد عملية الإنتاج */}
+            <span>الرصيد: <b style={{ color: item.balance > 0 ? '#10b981' : '#ef4444' }}>{item.balance || 0}</b></span>
+            <span>السعر: <b>{item.price || 0} ج.م</b></span>
           </div>
         </div>
-      )) : <p style={{ textAlign: 'center' }}>لا توجد خامات حالياً</p>}
+      )) : <p style={{ textAlign: 'center', color: '#64748b' }}>لا توجد خامات حالياً</p>}
     </div>
   );
 };
 
-const cardStyle = { background: '#fff', padding: '15px', borderRadius: '15px', marginBottom: '10px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' };
+const cardStyle = { 
+  background: '#fff', 
+  padding: '15px', 
+  borderRadius: '15px', 
+  marginBottom: '10px', 
+  boxShadow: '0 2px 4px rgba(0,0,0,0.05)' 
+};
 
 export default RawMaterials;
