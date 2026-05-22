@@ -328,7 +328,52 @@ const App = () => {
         );
       
       case 'PurchasesManager': 
-        return <PurchasesManager {...props} onSave={handleSavePurchase} onPurchaseComplete={handleSavePurchase} onOrderTrigger={(o) => setSupplierWaitingList(prev => [...prev, o])} />;
+        return (
+          <PurchasesManager 
+            {...props} 
+            suppliers={suppliers} // 1. تمرير قائمة الموردين المسجلين لعرضهم بالكامل في قسم المشتريات
+            onSave={handleSavePurchase} 
+            onPurchaseComplete={handleSavePurchase} 
+            onOrderTrigger={async (order) => {
+              // 2. ربط الطلبية وتوجيهها مباشرة وحقنها في حساب المورد الذي تم اختياره
+              if (order && order.supplierName) {
+                setSuppliers(prevSuppliers => {
+                  const updatedSuppliers = prevSuppliers.map(sup => {
+                    if (sup.name === order.supplierName) {
+                      const existingOrders = sup.orders || [];
+                      return { ...sup, orders: [...existingOrders, order] };
+                    }
+                    return sup;
+                  });
+                  localStorage.setItem('suppliers', JSON.stringify(updatedSuppliers));
+                  return updatedSuppliers;
+                });
+              }
+
+              // حفظ الطلبية في قائمة الانتظار العامة للتطبيق محلياً وسحابياً فوراً لحمايتها من الفقدان
+              setSupplierWaitingList(prev => {
+                const nextWaitingList = [...prev, order];
+                localStorage.setItem('waitingList', JSON.stringify(nextWaitingList));
+                
+                // مزامنة قائمة الانتظار إلى قاعدة البيانات لمنع مشاكل الاختفاء
+                CapacitorHttp.post({
+                  url: 'https://maamoul-pro-five.vercel.app/api/sync',
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  data: {
+                    module_name: 'suppliers_module',
+                    record_id: 'waitingList_records',
+                    jsondata: nextWaitingList
+                  }
+                });
+                
+                return nextWaitingList;
+              });
+
+              showSwal('تم إرسال الطلبية وحفظها في حساب المورد بنجاح');
+            }} 
+          />
+        );
       
       case 'Sales': 
         return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
