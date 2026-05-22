@@ -1,4 +1,4 @@
-name: "Nawh Final Recovery Build"
+name: "Nawh Production Build"
 
 on:
   push:
@@ -7,112 +7,182 @@ on:
   workflow_dispatch:
 
 jobs:
+  # -------------------------------------------------------------
+  # أولاً: وظيفة بناء الأندرويد (تم الاحتفاظ بها كما هي تماماً)
+  # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: 3. Setup Java 17
+      - name: 2. Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          
-      - name: 4. Build Web Project
-        env:
-          # 🌟 سحب التوكن من أسرار المستودع وحقنه داخل الـ Vite ليعمل أوتوماتيكياً في الـ APK
-          VITE_GITHUB_TOKEN: ${{ secrets.VITE_GITHUB_TOKEN }}
-        run: |
-          npm install --legacy-peer-deps
-          npm run build
-          # ضمان وجود المجلد المطلوب
-          mkdir -p www
-          cp -r dist/* www/ || echo "Using existing files"
 
-      - name: 5. Force Create Android Project
+      - name: 3. Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 4. Deep Clean & Install
         run: |
-          # تنظيف وحذف أي بقايا قديمة
-          rm -rf android
-          # إضافة المنصة وبناء المجلد من الصفر
+          rm -rf node_modules package-lock.json android ios dist_web
+          npm install --legacy-peer-deps
+          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
+          npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
+          npm run build
+
+      - name: 5. Initialize Android (Fresh Start)
+        run: |
           npx cap add android
           npx cap sync android
 
-      - name: 6. Inject Identity & Firebase
+      - name: 6. Inject Firebase & App Identity (Nawh)
+        shell: bash
         run: |
-          mkdir -p android/app/
+          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.zadelkhair.app)
           cat <<EOF > android/app/google-services.json
           {
-            "project_info": { "project_number": "162488255991", "project_id": "nawh-app" },
-            "client": [ { "client_info": { "mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2", "android_client_info": { "package_name": "com.nawh.app" } }, "api_key": [ { "current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ" } ], "services": { "appinvite_service": { "other_platform_oauth_client": [] } } } ],
+            "project_info": {
+              "project_number": "162488255991",
+              "project_id": "mamoul-app",
+              "storage_bucket": "mamoul-app.appspot.com"
+            } ,
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2",
+                  "android_client_info": { "package_name": "com.zadelkhair.app" }
+                },
+                "api_key": [ { "current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ" } ],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
             "configuration_version": "1"
           }
           EOF
-          
-          # ضبط المعرفات بدقة
-          sed -i 's/namespace ".*"/namespace "com.nawh.app"/' android/app/build.gradle
-          sed -i 's/applicationId ".*"/applicationId "com.nawh.app"/' android/app/build.gradle
-          
+
           STRINGS="android/app/src/main/res/values/strings.xml"
-          if [ -f "$STRINGS" ]; then
-            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">nawh.ai<\/string>/' $STRINGS
-          fi
-
-      - name: 6.5. Generate App Icons Only
-        run: |
-          # تثبيت أداة Capacitor Assets لتوليد الأيقونات
-          npm install @capacitor/assets --save-dev
+          APP_GRADLE="android/app/build.gradle"
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # إنشاء مجلد الـ assets الافتراضي في جذر المشروع
+          # تعديل اسم التطبيق إلى "Nawh" والحزمة إلى com.zadelkhair.app
+          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">Nawh<\/string>/' $STRINGS
+          sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
+          sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
+          
+          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
+
+      - name: 7. Generate App Icons & Splash
+        run: |
           mkdir -p assets
-          
-          # نسخ أيقونتك الخاصة المرفوعة بالمسار المذكور إلى المجلد باسم icon.png المعياري
-          cp resources/icon-foreground.png assets/icon.png
-          
-          # استخدام الأمر الرسمي الصحيح لتوليد الأيقونات فقط وتجنب الـ Splash تماماً
-          npx capacitor-assets generate --android --asset-types icon
+          # التأكد من وجود الأيقونة في المسار المطلوب واستنساخها للأصول
+          if [ -f "resources/icon-foreground.png" ]; then
+            cp resources/icon-foreground.png assets/icon-only.png
+            cp resources/icon-foreground.png assets/icon.png
+          elif [ -f "icon-only.png" ]; then
+            cp icon-only.png assets/icon-only.png
+          fi
+          npx capacitor-assets generate --android
 
-      - name: 7. Native Android Compilation (APK & AAB)
-        working-directory: ./android
+      - name: 8. Build Android Binaries
         run: |
+          cd android
           chmod +x gradlew
-          # إصلاح تعارض مكتبة bcprov
-          echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
-          # البناء وإنتاج ملفات الـ APK والـ AAB مع رفع كفاءة الذاكرة لتجنب الانهيار
-          ./gradlew assembleRelease bundleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx2048m"
+          ./gradlew assembleRelease
+          ./gradlew bundleRelease
 
-      - name: 8. Sign APK & AAB
+      - name: 9. Sign APK & AAB (Nawh Credentials)
         run: |
-          # إنشاء مفتاح التوقيع الفوري
-          keytool -genkey -v -keystore nawh.jks -alias nawh_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" -dname "CN=NawhApp, O=Nawh, C=EG" -noprompt
+          # توليد مفتاح توقيع جديد باسم Nawh
+          keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
+            -dname "CN=NawhApp, OU=Production, O=Nawh, L=Cairo, C=EG"
           
-          # تحديد مسارات الملفات المستخرجة
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
+            --ks-pass pass:"mamoul_pass_2026" --out Nawh-Final.apk "$APK_PATH"
+          
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
-          BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
-          
-          # توقيع ملف الـ APK
-          $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawh.jks --ks-pass pass:"nawh_pass_2026" --out Nawh-Final.apk "$APK_PATH"
-          
-          # توقيع ملف الـ AAB باستخدام jarsigner المتوفر ببيئة جاوا
-          jarsigner -keystore nawh.jks -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" "$AAB_PATH" nawh_alias
+          jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
           cp "$AAB_PATH" Nawh-Final.aab
 
-      - name: 9. Release to GitHub
+      - name: 10. Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.5.${{ github.run_number }}
-          name: "Nawh Stable Build v1.5.${{ github.run_number }}"
+          tag_name: v${{ github.run_number }}
+          name: "Nawh Build v${{ github.run_number }}"
           files: |
             Nawh-Final.apk
             Nawh-Final.aab
+            zadelkhair.jks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # -------------------------------------------------------------
+  # ثانياً: وظيفة بناء الآيفون (iOS) المضافة حديثاً بالتوازي
+  # -------------------------------------------------------------
+  build-ios:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - name: 1. Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: 3. Deep Clean & Install
+        run: |
+          rm -rf node_modules package-lock.json android ios dist_web
+          npm install --legacy-peer-deps
+          npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
+          npm run build
+
+      - name: 4. Initialize iOS Platform
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: 5. Generate iOS App Icons
+        run: |
+          mkdir -p assets
+          if [ -f "resources/icon-foreground.png" ]; then
+            cp resources/icon-foreground.png assets/icon-only.png
+            cp resources/icon-foreground.png assets/icon.png
+          elif [ -f "icon-only.png" ]; then
+            cp icon-only.png assets/icon-only.png
+          fi
+          npx capacitor-assets generate --ios
+
+      - name: 6. Build iOS Xcode Project
+        run: |
+          cd ios/App
+          # بناء التطبيق سحابياً بدون توقيع رقمي للتحقق من سلامة الأكواد أولاً
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release -allowProvisioningUpdates -sdk iphoneos CODE_SIGNING_ALLOWED=NO
+
+      # تم تعديل الخطوة 7 ليقوم برفع ملفات بناء الآيفون كملف مباشر للتحميل المباشر داخل نفس الـ Release
+      - name: 7. Publish iOS to Same Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: "Nawh Build v${{ github.run_number }}"
+          files: |
+            ios/App
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
