@@ -8,7 +8,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # بناء الأندرويد مع استخدام الكاش الرسمي الآمن لتجنب مشاكل المسارات
+  # بناء الأندرويد مع تهيئة جافا في التوقيت الصحيح بعد توليد المجلد
   # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -21,32 +21,33 @@ jobs:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      # تم دمج خاصية الكاش هنا لإدارة ملفات Gradle بشكل احترافي وآمن
-      - name: 2. Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-          cache: 'gradle'
-
-      - name: 3. Setup Node.js 24
+      - name: 2. Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm' # كاش إضافي لتسريع تثبيت حزم node_modules
+          cache: 'npm'
 
-      - name: 4. Deep Clean & Install
+      - name: 3. Deep Clean & Install
         run: |
           rm -rf node_modules package-lock.json android ios dist_web
           npm install --legacy-peer-deps
           npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
           npm run build
 
-      - name: 5. Initialize Android (Fresh Start)
+      - name: 4. Initialize Android (Fresh Start)
         run: |
           npx cap add android
           npx cap sync android
 
+      # تم نقل إعداد جافا إلى هنا (الخطوة 5) بعد أن أصبح مجلد android وملفات gradle موجودة بالفعل
+      - name: 5. Setup Java 17 & Enable Gradle Cache
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      # الآن نضع ملفات الفايربيز وتعديل الهوية والأسماء
       - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
