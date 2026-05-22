@@ -8,7 +8,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # أولاً: وظيفة بناء الأندرويد (تم الاحتفاظ بها كما هي تماماً)
+  # أولاً: وظيفة بناء الأندرويد (حل معالجة إصدار مكتبة التشفير كلياً)
   # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -16,6 +16,7 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.configureondemand=false"
 
     steps:
       - name: 1. Checkout Code
@@ -32,11 +33,11 @@ jobs:
         with:
           node-version: '24'
 
-      - name: 4. Deep Clean & Install
+      - name: 4. Deep Clean & Install (Force Clear Runner Cache)
         run: |
+          rm -rf ~/.gradle/caches/
           rm -rf node_modules package-lock.json android ios dist_web
           npm install --legacy-peer-deps
-          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
           npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
           npm run build
 
@@ -45,10 +46,10 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: 6. Inject Firebase & App Identity (Zad Elkhair)
+      - name: 6. Inject Firebase, App Identity & Fix Library Resolution
         shell: bash
         run: |
-          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.zadelkhair.app)
+          # 1. حقن ملف الجوجل الافتراضي
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -72,20 +73,31 @@ jobs:
 
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
+          PROJECT_GRADLE="android/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # تعديل اسم التطبيق إلى "زاد الخير" والحزمة إلى com.zadelkhair.app
+          # 2. تعديل الهوية والأسماء الأساسية والتسميات البرمجية
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
-          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
+          # 3. معالجة وحل رقم إصدار مكتبة التشفير الجدلية (Force Resolution Strategy)
+          # هذا الجزء يجبر خادم Gradle على تخطي الإصدار 1.79 التالف وبناء نسخة مستقرة مباشرة
+          echo "
+          allprojects {
+              configurations.all {
+                  resolutionStrategy {
+                      force 'org.bouncycastle:bcprov-jdk18on:1.74'
+                  }
+              }
+          }" >> $PROJECT_GRADLE
+
+          # 4. حقن الصلاحيات المطلوبة للإشعارات والشبكة والمخازن
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
         run: |
           mkdir -p assets
-          # التأكد من وجود الأيقونة في المسار المطلوب واستنساخها للأصول
           if [ -f "resources/icon-foreground.png" ]; then
             cp resources/icon-foreground.png assets/icon-only.png
             cp resources/icon-foreground.png assets/icon.png
@@ -94,16 +106,14 @@ jobs:
           fi
           npx capacitor-assets generate --android
 
-      - name: 8. Build Android Binaries
+      - name: 8. Build Android Binaries (Isolated Clean Build)
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
-          ./gradlew bundleRelease
+          ./gradlew clean assembleRelease bundleRelease --no-build-cache --no-daemon
 
       - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
         run: |
-          # توليد مفتاح توقيع جديد باسم زاد الخير
           keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
             -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
