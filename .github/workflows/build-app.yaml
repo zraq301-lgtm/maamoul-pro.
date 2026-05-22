@@ -23,32 +23,31 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle' # كاش تلقائي لملفات الجرادل لتسريع البناء المستقبلي
 
       - name: 3. Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'npm' # كاش تلقائي للمكتبات لتقليل وقت الـ Install
 
       - name: 4. Install ImageMagick System Dependency
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
 
-      - name: 5. Clean & Install Project Dependencies Strictly
+      - name: 5. Clean & Install Project Dependencies
         run: |
           # تنظيف كامل لضمان بناء مستقل 100% عن أي رواسب
           rm -rf node_modules package-lock.json android ios dist www build
           
-          # تثبيت المكتبات بشكل آمن واحترافي
+          # تثبيت المكتبات بناءً على ملف package.json الخاص بك دون زيادة أو نقصان
           npm install --legacy-peer-deps
           
-          # تشغيل أمر البناء لإنتاج مجلد المخرجات المعتمد dist
+          # تشغيل أمر البناء الخاص بك والمحدد في الـ scripts لإنتاج مجلد dist
           npm run build
 
       - name: 6. Initialize Android (Fresh Start)
         run: |
+          # إضافة منصة أندرويد خام ومزامنتها مع مجلد المخرجات dist
           npx cap add android
           npx cap sync android
 
@@ -57,14 +56,14 @@ jobs:
         run: |
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
+          MANIFEST="android/app/src/main/res/AndroidManifest.xml"
 
-          # ضبط الهوية الرسمية للحزمة com.zadelkhair.app واسم التطبيق
+          # أولاً: ضبط الهوية الرسمية للحزمة com.zadelkhair.app واسم التطبيق
           sed -i 's/applicationId "[^"]*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/namespace "[^"]*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
 
-          # حقن ملف خدمات جوجل (Firebase) بشكل ديناميكي ومؤمن
+          # ثانياً: حقن ملف خدمات جوجل (Firebase) للهوية المعرّفة
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -78,7 +77,7 @@ jobs:
                   "mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2",
                   "android_client_info": { "package_name": "com.zadelkhair.app" }
                 },
-                "api_key": [ { "current_key": "${{ secrets.FIREBASE_API_KEY || 'AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ' }}" } ],
+                "api_key": [ { "current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ" } ],
                 "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
               }
             ],
@@ -86,13 +85,15 @@ jobs:
           }
           EOF
 
-          # إدراج الأذونات القياسية المطلوبة في نظام أندرويد
+          # ثالثاً: إدراج الأذونات القياسية المطلوبة في نظام أندرويد بشكل سليم
           sed -i '/<manifest[^>]*>/a \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' $MANIFEST
 
-      - name: 8. Core Native Icon Generation (Bypassing capacitor-assets)
+      - name: 8. Core Native Icon Generation
         run: |
+          # تنظيف كامل لكافة مجلدات ومحتويات الـ mipmap التالفة لتهيئة أندرويد من الصفر
           rm -rf android/app/src/main/res/mipmap*
           
+          # تجهيز أيقونة المصدر الأساسية (إذا لم تكن موجودة يتم توليد واحدة بلون أخضر ناصع)
           BASE_SRC="base_icon.png"
           if [ -f "resources/icon-foreground.png" ]; then
             convert "resources/icon-foreground.png" -resize 512x512 png24:$BASE_SRC
@@ -102,19 +103,29 @@ jobs:
             convert -size 512x512 xc:#2ecc71 png24:$BASE_SRC
           fi
           
-          declare -A RESOLUTIONS=( ["mipmap-ldpi"]="36x36" ["mipmap-mdpi"]="48x48" ["mipmap-hdpi"]="72x72" ["mipmap-xhdpi"]="96x96" ["mipmap-xxhdpi"]="144x144" ["mipmap-xxxhdpi"]="192x192" )
+          # مصفوفة مجلدات الأندرويد القياسية للمقاسات والمقاس المقابل لها بالبكسل
+          declare -A RESOLUTIONS=( 
+            ["mipmap-ldpi"]="36x36" 
+            ["mipmap-mdpi"]="48x48" 
+            ["mipmap-hdpi"]="72x72" 
+            ["mipmap-xhdpi"]="96x96" 
+            ["mipmap-xxhdpi"]="144x144" 
+            ["mipmap-xxxhdpi"]="192x192" 
+          )
           
+          # توليد الأيقونات الكلاسيكية والأيقونات الأمامية التكيفية بشكل خام مباشر متوافق 100% مع AAPT2
           for DIR in "${!RESOLUTIONS[@]}"; do
             TARGET_DIR="android/app/src/main/res/$DIR"
             mkdir -p "$TARGET_DIR"
             SIZE="${RESOLUTIONS[$DIR]}"
             
+            # توليد الأيقونة القياسية والدائرية وأيقونة المقدمة
             convert $BASE_SRC -resize $SIZE png24:"$TARGET_DIR/ic_launcher.png"
             convert $BASE_SRC -resize $SIZE png24:"$TARGET_DIR/ic_launcher_round.png"
             convert $BASE_SRC -resize $SIZE png24:"$TARGET_DIR/ic_launcher_foreground.png"
           done
 
-      - name: 9. Build Production Binaries (Gradle Execution)
+      - name: 9. Build Production Binaries (Gradle)
         run: |
           cd android
           chmod +x gradlew
@@ -123,22 +134,20 @@ jobs:
           ./gradlew bundleRelease
 
       - name: 10. Securely Sign APK & AAB
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || 'mamoul_pass_2026' }}
         run: |
           # توليد مفتاح التشفير الخاص بالنشر للنسخة النهائية
           keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass "$KEYSTORE_PASSWORD" -keypass "$KEYSTORE_PASSWORD" \
+            -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
             -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
           
-          # توقيع وتجهيز ملف الـ APK عبر الـ SDK الرسمي الحالي للخادم تلقائياً
+          # توقيع وتجهيز ملف الـ APK
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          $ANDROID_HOME/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
-            --ks-pass pass:"$KEYSTORE_PASSWORD" --out ZadElkhair-Final.apk "$APK_PATH"
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
+            --ks-pass pass:"mamoul_pass_2026" --out ZadElkhair-Final.apk "$APK_PATH"
           
           # توقيع وتجهيز ملف الـ AAB المخصص للمتجر
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
-          jarsigner -keystore zadelkhair.jks -storepass "$KEYSTORE_PASSWORD" "$AAB_PATH" zadelkhair_alias
+          jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
           cp "$AAB_PATH" ZadElkhair-Final.aab
 
       - name: 11. Publish Assets to GitHub Releases
