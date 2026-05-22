@@ -289,6 +289,61 @@ const App = () => {
     showSwal('تم حفظ المادة وتحديث المخزن');
   };
 
+  // 🧠 دالة المعالجة والربط والترحيل الذكي لعمليات البيع وخصم المخازن
+  const handleSaveSaleAndSync = (newSale) => {
+    // 1. إضافة عملية البيع إلى مصفوفة المبيعات العامة
+    setSalesData(prevSales => [...prevSales, newSale]);
+
+    // 2. خصم الكمية المباعة تلقائياً من رصيد المنتج الأصلي داخل المخزن
+    setStock(prevStock => {
+      const updatedStock = prevStock.map(item => {
+        if (item.name === newSale.productName) {
+          const currentBalance = parseFloat(item.balance) || 0;
+          const soldQty = parseFloat(newSale.quantity) || 0;
+          return { ...item, balance: Math.max(0, currentBalance - soldQty) };
+        }
+        return item;
+      });
+      saveLocally('stock', updatedStock);
+      return updatedStock;
+    });
+
+    // 3. ترحيل وحقن عملية البيع مباشرة باسم وسجل العميل المختار
+    setCustomers(prevCustomers => {
+      const updatedCustomers = prevCustomers.map(customer => {
+        if (customer.name === newSale.customerName || customer.id === newSale.customerId) {
+          const currentHistory = customer.salesHistory || [];
+          return { ...customer, salesHistory: [...currentHistory, newSale] };
+        }
+        return customer;
+      });
+      saveLocally('customers', updatedCustomers);
+      return updatedCustomers;
+    });
+  };
+
+  // 🛠️ دالة الحذف الموحدة الشاملة لتفعيل روابط وأزرار الحذف في كل مكان لأي موديول
+  const handleUniversalDelete = async (itemId, moduleKey) => {
+    const targetModule = SYNC_MODULES.find(m => m.key === moduleKey);
+    if (!targetModule) return;
+
+    try {
+      // 1. التحديث الفوري محلياً للواجهة
+      if (setters[moduleKey]) {
+        setters[moduleKey](prev => {
+          const filtered = prev.filter(item => item.id !== itemId);
+          saveLocally(moduleKey, filtered);
+          return filtered;
+        });
+      }
+      // 2. ترحيل الحذف السحابي فوراً لقاعدة البيانات السحابية
+      await deleteCloudData(targetModule.module, moduleKey);
+      showSwal('تم حذف السجل وتحديث النظام بنجاح', 'success');
+    } catch (error) {
+      console.error("🚨 Universal Delete Error:", error);
+    }
+  };
+
   // حلقة الحفظ التلقائي في التخزين المحلي لكل الحالات
   useEffect(() => {
     if (isInitialLoading) return;
@@ -311,7 +366,8 @@ const App = () => {
       onBack: () => setActivePage('dashboard'), 
       stock, inventory, salesData, expenses, waste, suppliers, customers, staff, cashBook, supplierWaitingList,
       setStock, setInventory, setSalesData, setExpenses, setWaste, setSuppliers, setCustomers, setStaff, setCashBook,
-      deleteCloudData, analyzeSystemPerformanceWithAI
+      deleteCloudData, analyzeSystemPerformanceWithAI,
+      onDeleteItem: handleUniversalDelete // تمرير دالة الحذف الموحدة لجميع المكونات الفرعية
     };
     
     switch (activePage) {
@@ -321,7 +377,7 @@ const App = () => {
             setActivePage={setActivePage} 
             stats={financialStats} 
             staffCount={staff.length} 
-            productionHistory={productionData} // إرسال عمليات الإنتاج للعرض في جدول لوحة التحكم
+            productionHistory={productionData} // إرسال عمليات الإنتاج للعرض in جدول لوحة التحكم
             stock={stock}
             fetchData={downloadDataFromMaamoulCloud}
           />
@@ -376,7 +432,7 @@ const App = () => {
         );
       
       case 'Sales': 
-        return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
+        return <Sales {...props} onSaveSale={handleSaveSaleAndSync} onSaveSales={handleSaveSaleAndSync} />;
       
       case 'ProductionManager': 
         return (
