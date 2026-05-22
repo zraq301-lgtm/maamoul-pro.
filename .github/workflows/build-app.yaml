@@ -1,4 +1,4 @@
-name: "Nawh Production Build"
+name: "Zad Elkhair Production Build"
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: 6. Inject Firebase & App Identity (Nawh)
+      - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
           # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.zadelkhair.app)
@@ -74,8 +74,8 @@ jobs:
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # تعديل اسم التطبيق إلى "Nawh" والحزمة إلى com.zadelkhair.app
-          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">Nawh<\/string>/' $STRINGS
+          # تعديل اسم التطبيق إلى "زاد الخير" والحزمة إلى com.zadelkhair.app
+          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
@@ -98,34 +98,32 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          # تنظيف الكاش المحلي وتمرير جافا آرجومنت لتخطي خطأ الـ Jar المكسور
-          ./gradlew clean
-          ./gradlew assembleRelease -Dorg.gradle.jvmargs="-Xmx2048m -Djdk.lang.Process.launchMechanism=vfork"
-          ./gradlew bundleRelease -Dorg.gradle.jvmargs="-Xmx2048m -Djdk.lang.Process.launchMechanism=vfork"
+          ./gradlew assembleRelease
+          ./gradlew bundleRelease
 
-      - name: 9. Sign APK & AAB (Nawh Credentials)
+      - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
         run: |
-          # توليد مفتاح توقيع جديد باسم Nawh
+          # توليد مفتاح توقيع جديد باسم زاد الخير
           keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
-            -dname "CN=NawhApp, OU=Production, O=Nawh, L=Cairo, C=EG"
+            -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
           
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
           /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
-            --ks-pass pass:"mamoul_pass_2026" --out Nawh-Final.apk "$APK_PATH"
+            --ks-pass pass:"mamoul_pass_2026" --out ZadElkhair-Final.apk "$APK_PATH"
           
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
           jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
-          cp "$AAB_PATH" Nawh-Final.aab
+          cp "$AAB_PATH" ZadElkhair-Final.aab
 
       - name: 10. Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: "Nawh Build v${{ github.run_number }}"
+          name: "Zad Elkhair Build v${{ github.run_number }}"
           files: |
-            Nawh-Final.apk
-            Nawh-Final.aab
+            ZadElkhair-Final.apk
+            ZadElkhair-Final.aab
             zadelkhair.jks
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
