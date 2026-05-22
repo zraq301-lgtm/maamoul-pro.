@@ -337,17 +337,22 @@ const App = () => {
         return (
           <ProductionManager 
             {...props} 
+            setStock={(updatedStock) => {
+              // إلزام الحفظ الموضعي الفوري في الـ localStorage لمنع محرك المزامنة الخلفية من استعادة النسخة القديمة
+              localStorage.setItem('stock', JSON.stringify(updatedStock));
+              setStock(updatedStock);
+            }}
             onSaveProduction={(p) => {
               setProductionData(prev => {
                 const nextProduction = [...prev, p];
-                saveLocally('productionData', nextProduction);
+                localStorage.setItem('productionData', JSON.stringify(nextProduction));
                 return nextProduction;
               });
             }} 
             onSaveWaste={(w) => {
               setWaste(prev => {
                 const nextWaste = [...prev, w];
-                saveLocally('waste', nextWaste);
+                localStorage.setItem('waste', JSON.stringify(nextWaste));
                 return nextWaste;
               });
             }} 
