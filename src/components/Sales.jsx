@@ -12,8 +12,20 @@ import AlertCircle from 'lucide-react/dist/esm/icons/alert-circle';
 const Sales = ({ onBack, onSaveSale, customers = [], stock = [] }) => {
   const [sale, setSale] = useState({ customerName: '', productName: '', quantity: '', pricePerUnit: '', date: new Date().toISOString().split('T')[0] });
   
-  // تصفية المنتجات لتكون ذات رصيد متاح وجاهزة للبيع فقط
-  const availableProducts = stock.filter(s => s.balance > 0 && s.type === 'جاهز للبيع');
+  // تصفية المنتجات لتكون ذات رصيد متاح وجاهزة للبيع بناءً على شروط كود المخزن السابق للإنتاج والمنتج النهائي
+  const availableProducts = stock.filter(s => {
+    const hasBalance = s.balance > 0;
+    
+    const name = (s.name || '').toString().toLowerCase();
+    const department = (s.department || s.source || '').toString();
+    const category = (s.category || '').toString();
+    
+    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج') || category === 'منتجات';
+    const isFinishedName = name.includes('نهائي') || name.includes('جاهز') || name.includes('معمول');
+    
+    // يجب أن يكون له رصيد، وينطبق عليه شرط "جاهز للبيع" الأصلي أو شروط المخزن للمنتج النهائي
+    return hasBalance && (s.type === 'جاهز للبيع' || isFromProduction || isFinishedName);
+  });
   
   const selectedProduct = stock.find(s => s.name === sale.productName);
   const availableQty = selectedProduct ? selectedProduct.balance : 0;
