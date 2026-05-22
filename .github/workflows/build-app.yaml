@@ -53,7 +53,7 @@ jobs:
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
 
-          # أولاً: ضبط الهوية الرسمية للحزمةcom.zadelkhair.app واسم التطبيق
+          # أولاً: ضبط الهوية الرسمية للحزمة com.zadelkhair.app واسم التطبيق
           sed -i 's/applicationId "[^"]*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/namespace "[^"]*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
@@ -83,20 +83,25 @@ jobs:
           # ثالثاً: إدراج الأذونات القياسية المطلوبة في نظام أندرويد بشكل احترافي وسليم
           sed -i '/<manifest[^>]*>/a \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' $MANIFEST
 
-      - name: 7. Generate App Icons & Splash Assets
+      - name: 7. Generate App Icons From Existing Resource
         run: |
-          mkdir -p assets
+          # إنشاء مجلد البناء المؤقت للأيقونات وضمان القراءة من ملفك الوحيد والمؤكد
+          mkdir -p assets resources
+          
           if [ -f "resources/icon-foreground.png" ]; then
-            cp resources/icon-foreground.png assets/icon-only.png
+            # نسخ وتجهيز الأيقونة الحقيقية لتطابق متطلبات أداة الإنشاء التلقائي لـ Capacitor
             cp resources/icon-foreground.png assets/icon.png
-          elif [ -f "icon-only.png" ]; then
-            cp icon-only.png assets/icon-only.png
-            cp icon-only.png assets/icon.png
+            cp resources/icon-foreground.png assets/icon-only.png
+            cp resources/icon-foreground.png resources/icon.png
           else
-            # إنشاء ملف احتياطي في حال غياب الصور لمنع توقف الأكشن
-            convert -size 512x512 xc:blue assets/icon.png || touch assets/icon.png
+            # حماية احتياطية صارمة لمنع انهيار الـ Build في أي حال من الأحوال
+            convert -size 512x512 xc:#2ecc71 assets/icon.png
             cp assets/icon.png assets/icon-only.png
+            cp assets/icon.png resources/icon.png
+            cp assets/icon.png resources/icon-foreground.png
           fi
+          
+          # تشغيل أداة التوليد الرسمية لبناء الأيقونات لكافة شاشات الأندرويد بناءً على ملفك السليم
           npx capacitor-assets generate --android
 
       - name: 8. Build Production Binaries (Gradle Execution)
