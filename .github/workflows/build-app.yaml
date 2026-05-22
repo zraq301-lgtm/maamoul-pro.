@@ -1,4 +1,4 @@
-name: "Zad Elkhair Production Build"
+name: "nawh.ai Production Build"
 
 on:
   push:
