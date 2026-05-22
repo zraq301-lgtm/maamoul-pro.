@@ -66,23 +66,19 @@ jobs:
             sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">nawh.ai<\/string>/' $STRINGS
           fi
 
-      - name: 6.5. Generate App Icons from Resource
+      - name: 6.5. Generate App Icons Only
         run: |
           # تثبيت أداة Capacitor Assets لتوليد الأيقونات
           npm install @capacitor/assets --save-dev
           
-          # إنشاء مجلد الـ assets الافتراضي الذي تتوقعه الأداة في جذر المشروع
+          # إنشاء مجلد الـ assets الافتراضي في جذر المشروع
           mkdir -p assets
           
-          # نسخ أيقونتك الخاصة من مسارها وتغيير اسمها إلى الاسم الافتراضي المدعوم (icon.png)
+          # نسخ أيقونتك الخاصة المرفوعة بالمسار المذكور إلى المجلد باسم icon.png المعياري
           cp resources/icon-foreground.png assets/icon.png
           
-          # حماية التوليد: أداة capacitor-assets تنهار إذا لم تجد ملف splash.png
-          # نقوم بنسخ الأيقونة مؤقتاً كـ splash لمنع انهيار السكريبت وتأمين البناء بنجاح
-          cp assets/icon.png assets/splash.png
-          
-          # توليد كافة مقاسات الأيقونات لمجلد الأندرويد تلقائياً وبدون خيارات غير معروفة
-          npx capacitor-assets generate --android
+          # أمر التوليد المخصص للأيقونات فقط (--icon) لمنع البحث عن الـ Splash أو التسبب في انهيار البناء
+          npx capacitor-assets generate --android --icon
 
       - name: 7. Native Android Compilation (APK & AAB)
         working-directory: ./android
