@@ -337,22 +337,67 @@ const App = () => {
         return (
           <ProductionManager 
             {...props} 
-            setStock={(updatedStock) => {
-              // إلزام الحفظ الموضعي الفوري في الـ localStorage لمنع محرك المزامنة الخلفية من استعادة النسخة القديمة
-              localStorage.setItem('stock', JSON.stringify(updatedStock));
+            setStock={async (updatedStock) => {
+              // 1. الخصم والتحديث المحلي الفوري الفعلي للمخزون ومنع عمليات الكتابة الفوقية العشوائية
               setStock(updatedStock);
+              localStorage.setItem('stock', JSON.stringify(updatedStock));
+
+              // 2. 🚀 مزامنة فورية وقسرية ومباشرة للمخزن المخصوم مع السيرفر السحابي لقتل التضارب في نفس اللحظة
+              try {
+                await CapacitorHttp.post({
+                  url: 'https://maamoul-pro-five.vercel.app/api/sync',
+                  method: 'POST',
+                  headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                  },
+                  data: {
+                    module_name: 'inventory_module',
+                    record_id: 'stock_records',
+                    jsondata: updatedStock  
+                  }
+                });
+              } catch (err) {
+                console.error("🚨 خطأ تزامن المخزن الفوري:", err);
+              }
             }}
-            onSaveProduction={(p) => {
+            onSaveProduction={async (p) => {
               setProductionData(prev => {
                 const nextProduction = [...prev, p];
                 localStorage.setItem('productionData', JSON.stringify(nextProduction));
+
+                // مزامنة فورية لسجل الإنتاج إلى السيرفر لقاعدة البيانات السحابية لمنع الاختفاء
+                CapacitorHttp.post({
+                  url: 'https://maamoul-pro-five.vercel.app/api/sync',
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  data: {
+                    module_name: 'manufacturing_module',
+                    record_id: 'productionData_records',
+                    jsondata: nextProduction
+                  }
+                });
+
                 return nextProduction;
               });
             }} 
-            onSaveWaste={(w) => {
+            onSaveWaste={async (w) => {
               setWaste(prev => {
                 const nextWaste = [...prev, w];
                 localStorage.setItem('waste', JSON.stringify(nextWaste));
+
+                // مزامنة فورية للهالك إلى قاعدة البيانات السحابية لمنع الاختفاء
+                CapacitorHttp.post({
+                  url: 'https://maamoul-pro-five.vercel.app/api/sync',
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  data: {
+                    module_name: 'waste_module',
+                    record_id: 'waste_records',
+                    jsondata: nextWaste
+                  }
+                });
+
                 return nextWaste;
               });
             }} 
