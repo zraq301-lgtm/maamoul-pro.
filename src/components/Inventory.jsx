@@ -34,7 +34,7 @@ const Inventory = ({
     return isFromProduction || isFinishedName;
   });
 
-  // الخامات: هي العناصر التي لا تنطبق عليها شروط المنتجات النهائية تماماً (تطابقاً مع صفحة الإنتاج)
+  // الخامات: هي العناصر التي لا تنطبق عليها شروط المنتجات النهائية تماماً (تطابقاً مع صفحة الإنتاج لخصمها وسحبها)
   const rawMaterialsData = dataList.filter(item => {
     const name = (item.name || '').toString().toLowerCase();
     const department = (item.department || item.source || '').toString();
@@ -43,7 +43,7 @@ const Inventory = ({
     const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج') || category === 'منتجات';
     const isFinishedName = name.includes('نهائي') || name.includes('جاهز') || name.includes('معمول');
     
-    // استبعاد المنتجات الجاهزة لتظهر الخامات الصافية فقط
+    // استبعاد المنتجات الجاهزة لتظهر الخامات الصافية فقط ويتم تحديثها بالخصم والسحب
     return !(isFromProduction || isFinishedName);
   });
 
@@ -91,7 +91,7 @@ const Inventory = ({
       </div>
 
       <div style={styles.contentArea}>
-        {/* 1. واجهة الخامات - تمرير بيانات الخامات المصفاة فقط ودالة الحذف */}
+        {/* 1. واجهة الخامات - تمرير بيانات الخامات المصفاة فقط ودالة الحذف لضمان دقة الكميات المسحوبة */}
         {activeTab === 'raw' && (
           <RawMaterials 
             categories={rawMaterialsData} 
