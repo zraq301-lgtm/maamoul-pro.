@@ -8,7 +8,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # أولاً: وظيفة بناء الأندرويد (تم حل مشكلة الـ SQLite Cache)
+  # أولاً: وظيفة بناء الأندرويد (تمت ترقية Java إلى 21 لحل توافقية SQLite)
   # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -21,11 +21,11 @@ jobs:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java 17
+      - name: 2. Setup Java 21 (تم التحديث لحل توافقية حزمة التشفير bcprov)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: 3. Setup Node.js 24
         uses: actions/setup-node@v4
@@ -98,8 +98,8 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          # تنظيف الكاش المحلي وتحديث الاعتماديات لتفادي تضارب ملفات حزمة التشفير الخاصة بـ SQLite
-          ./gradlew clean --refresh-dependencies
+          # إيقاف الـ Daemon تماماً وتجاوز قفل الملفات لضمان معالجة حزم جافا نظيفة
+          ./gradlew clean --refresh-dependencies --no-daemon
           ./gradlew assembleRelease --no-daemon
           ./gradlew bundleRelease --no-daemon
 
