@@ -7,9 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # -------------------------------------------------------------
-  # أولاً: وظيفة بناء الأندرويد (تم الاحتفاظ بها كما هي تماماً)
-  # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -32,23 +29,21 @@ jobs:
         with:
           node-version: '24'
 
-      - name: 4. Deep Clean & Install
+      - name: 4. Install Dependencies & Build Web
         run: |
-          rm -rf node_modules package-lock.json android ios dist_web
+          # لاحظ هنا: شلنا امر rm -rf android عشان نحافظ على التعديل اللي عملناه
+          rm -rf node_modules package-lock.json dist_web
           npm install --legacy-peer-deps
-          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
-          npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
           npm run build
 
-      - name: 5. Initialize Android (Fresh Start)
+      - name: 5. Sync Capacitor
         run: |
-          npx cap add android
+          # عمل مزامنة فقط للكود بدون مسح مجلد الـ android الأساسي
           npx cap sync android
 
       - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
-          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.zadelkhair.app)
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -74,18 +69,15 @@ jobs:
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # تعديل اسم التطبيق إلى "زاد الخير" والحزمة إلى com.zadelkhair.app
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
-          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
         run: |
           mkdir -p assets
-          # التأكد من وجود الأيقونة في المسار المطلوب واستنساخها للأصول
           if [ -f "resources/icon-foreground.png" ]; then
             cp resources/icon-foreground.png assets/icon-only.png
             cp resources/icon-foreground.png assets/icon.png
@@ -103,7 +95,6 @@ jobs:
 
       - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
         run: |
-          # توليد مفتاح توقيع جديد باسم زاد الخير
           keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
             -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
