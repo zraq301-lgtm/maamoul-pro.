@@ -29,57 +29,36 @@ jobs:
         with:
           node-version: '24'
 
-      - name: 4. Deep Clean & Install Dependencies
+      - name: 4. Clean & Install Project Dependencies Strictly
         run: |
-          # حذف أي رواسب قد تتسبب في تعارض البناء السحابي لضمان الصفر المطلق
-          rm -rf node_modules package-lock.json android ios dist dist_web build
+          # تنظيف كامل لضمان بناء مستقل 100% عن أي رواسب
+          rm -rf node_modules package-lock.json android ios dist www build
           
-          # تثبيت الاعتمادات الأساسية للمشروع
+          # تثبيت المكتبات بناءً على ملف package.json الخاص بك دون زيادة أو نقصان
           npm install --legacy-peer-deps
           
-          # تثبيت الإضافات اللازمة للـ SQLite والإشعارات وضمان استقرارها سحابياً
-          npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
-          
-          # بناء ملفات الويب الثابتة للمشروع (إنتاج مجلد الـ build أو dist المذكور في capacitor.config)
+          # تشغيل أمر البناء الخاص بك والمحدد في الـ scripts لإنتاج مجلد dist
           npm run build
 
-      - name: 5. Initialize Android (Fresh & Independent Start)
+      - name: 5. Initialize Android (Fresh Start)
         run: |
-          # إضافة منصة أندرويد خام من الصفر
+          # إضافة منصة أندرويد خام ومزامنتها مع مجلد المخرجات dist
           npx cap add android
-          
-          # مزامنة ملفات الويب والإضافات داخل مجلد الأندرويد الجديد
           npx cap sync android
 
-      - name: 6. Inject Configurations, Firebase & Advanced Fixes
+      - name: 6. Inject Configurations & Firebase
         shell: bash
         run: |
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
-          ROOT_GRADLE="android/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
 
-          # أولاً: إعادة ضبط معرّف الحزمة (Package Name / Application ID) واسم التطبيق بشكل صارم واحترافي
+          # أولاً: ضبط الهوية الرسمية للحزمةcom.zadelkhair.app واسم التطبيق
           sed -i 's/applicationId "[^"]*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/namespace "[^"]*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
 
-          # ثانياً: حل مشكلة تعارض الـ Jar الخاصة بـ bcprov ومكتبات التشفير لـ SQLite في الخوادم
-          cat << 'EOF' >> $ROOT_GRADLE
-          subprojects {
-              project.configurations.all {
-                  resolutionStrategy {
-                      eachDependency { details ->
-                          if (details.requested.group == 'org.bouncycastle') {
-                              details.useVersion '1.70'
-                          }
-                      }
-                  }
-              }
-          }
-          EOF
-
-          # ثالثاً: حقن ملف Firebase (google-services.json) بالبيانات المحدثة للحزمة الجديدة
+          # ثانياً: حقن ملف خدمات جوجل (Firebase) للهوية المعرّفة
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -101,13 +80,11 @@ jobs:
           }
           EOF
 
-          # رابعاً: حقن أذونات نظام أندرويد المطلوبة للإنترنت، الشبكة، والإشعارات الدقيقة في الـ Manifest
-          # نستخدم أسلوب الصفر المطلق عبر استبدال وسم الـ manifest لإدراج الأذونات بشكل سليم ومثالي
-          sed -i '/<manifest[^>]*>/a \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
+          # ثالثاً: إدراج الأذونات القياسية المطلوبة في نظام أندرويد بشكل احترافي وسليم
+          sed -i '/<manifest[^>]*>/a \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash Assets
         run: |
-          # إنشاء الأيقونات بشكل ديناميكي كامل دون افتراض وجود ملفات مسبقة في مجلدات الأندرويد
           mkdir -p assets
           if [ -f "resources/icon-foreground.png" ]; then
             cp resources/icon-foreground.png assets/icon-only.png
@@ -116,7 +93,7 @@ jobs:
             cp icon-only.png assets/icon-only.png
             cp icon-only.png assets/icon.png
           else
-            # إنشاء أيقونة طوارئ فارغة إذا لم يجد السيرفر أي ملفات لمنع توقف البناء
+            # إنشاء ملف احتياطي في حال غياب الصور لمنع توقف الأكشن
             convert -size 512x512 xc:blue assets/icon.png || touch assets/icon.png
             cp assets/icon.png assets/icon-only.png
           fi
@@ -126,24 +103,23 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          # تنظيف بيئة الجرادل ثم تجميع الـ APK والـ AAB لنسخة الـ Release
           ./gradlew clean
           ./gradlew assembleRelease
           ./gradlew bundleRelease
 
       - name: 9. Securely Sign APK & AAB
         run: |
-          # إنشاء Keystore فريدة ومستقلة أثناء خطوة البناء مباشرة للتشفير والامضاء
+          # توليد مفتاح التشفير الخاص بالنشر للنسخة النهائية
           keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
             -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
           
-          # البحث عن ملف الـ APK وتوقيعه بأدوات أندرويد الرسمية المتوفرة على السيرفر
+          # توقيع وتجهيز ملف الـ APK
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
           /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
             --ks-pass pass:"mamoul_pass_2026" --out ZadElkhair-Final.apk "$APK_PATH"
           
-          # البحث عن ملف الـ AAB (المخصص لمتجر جوجل بلاي) وتوقيعه بنجاح
+          # توقيع وتجهيز ملف الـ AAB المخصص للمتجر
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
           jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
           cp "$AAB_PATH" ZadElkhair-Final.aab
