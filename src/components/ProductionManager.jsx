@@ -75,53 +75,59 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
 
   const handleProcessProduction = () => {
     if (!onSaveProduction || !setStock) {
-      console.error("Missing required functions");
+      alert("🚨 دالة التحديث غير ممررة بشكل صحيح من الأب");
       return;
     }
 
     let totalActualCost = 0;
-    // أخذ نسخة عميقة من المخزن للعمل عليها
+    // أخذ نسخة عميقة ونظيفة من المخزن الحالي للعمل عليها
     const updatedStock = JSON.parse(JSON.stringify(stock || []));
     
     // كائن جديد لتسجيل الخامات المستهلكة فعلياً فقط (أكبر من 0) لحفظها في السجل التاريخي
     const actualConsumedIngredients = {};
 
-    // --- منطق خصم الخامات (النقص من المخزن فورا) ---
+    // --- منطق خصم الخامات (المطور والمحمي من أخطاء المسافات والنصوص) ---
     for (const [ingName, requiredQty] of Object.entries(ingredientsInputs)) {
-      if (requiredQty <= 0) continue;
+      if (!ingName || requiredQty <= 0) continue;
       
-      const stockItem = updatedStock.find(s => s.name && s.name.trim() === ingName.trim());
-      const totalAvailable = stockItem ? (stockItem.balance || 0) : 0;
+      // تنظيف النص تماماً لضمان المطابقة وثبات عملية البحث
+      const cleanIngName = ingName.trim().toLowerCase();
+      
+      // البحث عن الخامة بمرونة عالية
+      const stockItem = updatedStock.find(s => s.name && s.name.trim().toLowerCase() === cleanIngName);
+      const totalAvailable = stockItem ? (parseFloat(stockItem.balance) || 0) : 0;
 
       if (!stockItem || totalAvailable < requiredQty) {
-        alert(`⚠️ عجز في مادة: ${ingName}\nالمطلوب: ${requiredQty}\nالمتوفر: ${totalAvailable}`);
+        alert(`⚠️ عجز في مادة: ${ingName}\nالمطلوب: ${requiredQty}\nالمتوفر في المخزن: ${totalAvailable}`);
         return;
       }
 
-      // إضافة المادة المستهلكة فعلياً للكائن المصفى لترحيلها للسجل التاريخي
-      actualConsumedIngredients[ingName] = requiredQty;
+      // تسجيل الاستهلاك الفعلي بالاسم النظيف
+      actualConsumedIngredients[ingName.trim()] = requiredQty;
 
       let remainingToWithdraw = requiredQty;
       
-      // الخصم من الدفعات (Batches) لضمان دقة التكلفة والرصيد
+      // الخصم المباشر والدقيق من الدفعات (Batches) أو من الرصيد الكلي مباشرة
       if (!stockItem.batches || stockItem.batches.length === 0) {
-        totalActualCost += (requiredQty * (stockItem.price || 0));
-        stockItem.balance = (stockItem.balance || 0) - requiredQty;
+        totalActualCost += (requiredQty * (parseFloat(stockItem.price) || 0));
+        stockItem.balance = parseFloat((totalAvailable - requiredQty).toFixed(2));
       } else {
         while (remainingToWithdraw > 0 && stockItem.batches.length > 0) {
           const currentBatch = stockItem.batches[0];
-          if (currentBatch.quantity <= remainingToWithdraw) {
-            totalActualCost += (currentBatch.quantity * (currentBatch.price || 0));
-            remainingToWithdraw -= currentBatch.quantity;
-            stockItem.batches.shift();
+          const batchQty = parseFloat(currentBatch.quantity) || 0;
+
+          if (batchQty <= remainingToWithdraw) {
+            totalActualCost += (batchQty * (parseFloat(currentBatch.price) || 0));
+            remainingToWithdraw -= batchQty;
+            stockItem.batches.shift(); // حذف الدفعة المنتهية
           } else {
-            totalActualCost += (remainingToWithdraw * (currentBatch.price || 0));
-            currentBatch.quantity -= remainingToWithdraw;
+            totalActualCost += (remainingToWithdraw * (parseFloat(currentBatch.price) || 0));
+            currentBatch.quantity = parseFloat((batchQty - remainingToWithdraw).toFixed(2));
             remainingToWithdraw = 0;
           }
         }
-        // تحديث الرصيد الإجمالي بناءً على المتبقي في الدفعات
-        stockItem.balance = stockItem.batches.reduce((sum, b) => sum + b.quantity, 0);
+        // تحديث الرصيد الإجمالي بناءً على المجموع الفعلي المتبقي في الدفعات حماية من التضارب
+        stockItem.balance = parseFloat(stockItem.batches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0).toFixed(2));
       }
     }
 
@@ -134,39 +140,41 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
 
     const costPerCarton = totalActualCost / totalProductionUnits;
 
-    // --- منطق إضافة المنتج النهائي للمخزن وتوجيهه مباشرة لقسم المنتجات بناءً على الفلاتر المشتركة ---
+    // --- منطق إضافة المنتج النهائي للمخزن أو تحديثه ---
     formData.products.forEach(prod => {
-      if (prod.quantity <= 0) return;
+      if (!prod.name || prod.quantity <= 0) return;
 
-      let productInStock = updatedStock.find(s => s.name && s.name.trim() === prod.name.trim());
+      const cleanProdName = prod.name.trim().toLowerCase();
+      let productInStock = updatedStock.find(s => s.name && s.name.trim().toLowerCase() === cleanProdName);
+      
       const newBatch = { 
         purchaseDate: formData.date, 
         quantity: parseFloat(prod.quantity), 
-        price: costPerCarton 
+        price: parseFloat(costPerCarton.toFixed(2))
       };
 
       if (productInStock) {
         if (!productInStock.batches) productInStock.batches = [];
         productInStock.batches.push(newBatch);
-        productInStock.balance = (productInStock.balance || 0) + parseFloat(prod.quantity);
-        productInStock.price = costPerCarton; // تحديث السعر لآخر تكلفة إنتاج
+        productInStock.balance = parseFloat(((parseFloat(productInStock.balance) || 0) + parseFloat(prod.quantity)).toFixed(2));
+        productInStock.price = parseFloat(costPerCarton.toFixed(2)); 
         productInStock.category = 'منتجات'; 
         productInStock.department = 'إنتاج';
       } else {
         updatedStock.push({
           id: Date.now() + Math.random(),
-          name: prod.name,
+          name: prod.name.trim(),
           balance: parseFloat(prod.quantity),
           unit: 'كرتونة',
           category: 'منتجات', 
           department: 'إنتاج',
           batches: [newBatch],
-          price: costPerCarton
+          price: parseFloat(costPerCarton.toFixed(2))
         });
       }
     });
 
-    // تحديث المخزن الرئيسي الفعلي في مكون الأب بالكميات المخصومة والمضافة الجديدة
+    // خطوة الأمان: إرسال مصفوفة المخزن المخصومة والمحدثة بالكامل وبشكل فوري إلى الأب
     setStock(updatedStock);
     
     // حفظ السجل التاريخي بالخامات المسحوبة فعلياً فقط
