@@ -29,7 +29,12 @@ jobs:
         with:
           node-version: '24'
 
-      - name: 4. Clean & Install Project Dependencies Strictly
+      - name: 4. Install ImageMagick System Dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: 5. Clean & Install Project Dependencies Strictly
         run: |
           # تنظيف كامل لضمان بناء مستقل 100% عن أي رواسب
           rm -rf node_modules package-lock.json android ios dist www build
@@ -40,13 +45,13 @@ jobs:
           # تشغيل أمر البناء الخاص بك والمحدد في الـ scripts لإنتاج مجلد dist
           npm run build
 
-      - name: 5. Initialize Android (Fresh Start)
+      - name: 6. Initialize Android (Fresh Start)
         run: |
           # إضافة منصة أندرويد خام ومزامنتها مع مجلد المخرجات dist
           npx cap add android
           npx cap sync android
 
-      - name: 6. Inject Configurations & Firebase
+      - name: 7. Inject Configurations & Firebase
         shell: bash
         run: |
           STRINGS="android/app/src/main/res/values/strings.xml"
@@ -83,28 +88,28 @@ jobs:
           # ثالثاً: إدراج الأذونات القياسية المطلوبة في نظام أندرويد بشكل احترافي وسليم
           sed -i '/<manifest[^>]*>/a \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' $MANIFEST
 
-      - name: 7. Generate App Icons From Existing Resource
+      - name: 8. Generate App Icons From Existing Resource
         run: |
-          # إنشاء مجلد البناء المؤقت للأيقونات وضمان القراءة من ملفك الوحيد والمؤكد
+          # إنشاء مجلدات الموارد لـ Capacitor Assets
           mkdir -p assets resources
           
           if [ -f "resources/icon-foreground.png" ]; then
-            # نسخ وتجهيز الأيقونة الحقيقية لتطابق متطلبات أداة الإنشاء التلقائي لـ Capacitor
+            # نسخ وتجهيز الأيقونة الحقيقية لتطابق متطلبات أداة الإنشاء التلقائي
             cp resources/icon-foreground.png assets/icon.png
             cp resources/icon-foreground.png assets/icon-only.png
             cp resources/icon-foreground.png resources/icon.png
           else
-            # حماية احتياطية صارمة لمنع انهيار الـ Build في أي حال من الأحوال
-            convert -size 512x512 xc:#2ecc71 assets/icon.png
+            # حماية احتياطية صارمة وتوليد صورة PNG سليمة 100% متوافقة مع معايير AAPT2
+            convert -size 512x512 xc:#2ecc71 png24:assets/icon.png
             cp assets/icon.png assets/icon-only.png
             cp assets/icon.png resources/icon.png
             cp assets/icon.png resources/icon-foreground.png
           fi
           
-          # تشغيل أداة التوليد الرسمية لبناء الأيقونات لكافة شاشات الأندرويد بناءً على ملفك السليم
+          # تشغيل أداة التوليد الرسمية لبناء الأيقونات لكافة شاشات الأندرويد
           npx capacitor-assets generate --android
 
-      - name: 8. Build Production Binaries (Gradle Execution)
+      - name: 9. Build Production Binaries (Gradle Execution)
         run: |
           cd android
           chmod +x gradlew
@@ -112,7 +117,7 @@ jobs:
           ./gradlew assembleRelease
           ./gradlew bundleRelease
 
-      - name: 9. Securely Sign APK & AAB
+      - name: 10. Securely Sign APK & AAB
         run: |
           # توليد مفتاح التشفير الخاص بالنشر للنسخة النهائية
           keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
@@ -129,7 +134,7 @@ jobs:
           jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
           cp "$AAB_PATH" ZadElkhair-Final.aab
 
-      - name: 10. Publish Assets to GitHub Releases
+      - name: 11. Publish Assets to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
