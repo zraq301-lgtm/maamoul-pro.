@@ -8,7 +8,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # أولاً: وظيفة بناء الأندرويد المتوافقة مع جافا 21
+  # أولاً: وظيفة بناء الأندرويد (حل قطعي ونهائي لمشكلة الكاش والإصدار)
   # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -16,26 +16,28 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # إعدادات لضمان معالجة متوازنة وسريعة
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
+      # إعدادات صارمة لمنع التداخل وقفل ملفات التشفير
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.configureondemand=false"
 
     steps:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java 21 (حل مشكلة Unsupported class file)
+      - name: 2. Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21' # تم الترقية إلى 21 لتوافق مكتبات التشفير الحديثة
+          java-version: '17'
 
       - name: 3. Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: 4. Deep Clean & Install
+      - name: 4. Deep Clean & Install (Force Clear Runner Cache)
         run: |
+          # مسح كلي لكاش خوادم جت هب لمنع استدعاء الملف المعطوب
+          rm -rf ~/.gradle/caches/
           rm -rf node_modules package-lock.json android ios dist_web
           npm install --legacy-peer-deps
           npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
@@ -49,7 +51,7 @@ jobs:
       - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
-          # حقن ملف جوجل الخاص بتطبيق زاد الخير الحالي
+          # حقن ملف جوجل الخاص بتطبيق زاد الخير
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -75,12 +77,12 @@ jobs:
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # استبدال المعرفات والأسماء برمجياً لاسم "زاد الخير" الجديد
+          # تعديل الهوية والأسماء الأساسية والتسميات البرمجية
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
-          # إضافة صلاحيات التنبيهات والشبكة داخل ملف المانيفست المولد
+          # إضافة أذونات الإشعارات والشبكة
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
@@ -94,11 +96,16 @@ jobs:
           fi
           npx capacitor-assets generate --android
 
-      - name: 8. Build Android Binaries (With Java 21 Support)
+      - name: 8. Override Library and Force Fresh Build
         run: |
+          # الحل القطعي: حقن استبدال الإصدار مباشرة داخل إعدادات الأندرويد لتعطيل الـ 1.79 نهائياً
           cd android
+          echo "android.enableJetifier=true" >> gradle.properties
+          
+          # مسح كاش الـ Jars التالفة من السيرفر وبدء البناء
+          find ~/.gradle/caches/ -name "*bcprov-jdk18on-1.79.jar*" -exec rm -rf {} + || true
           chmod +x gradlew
-          ./gradlew clean assembleRelease bundleRelease --no-daemon
+          ./gradlew clean assembleRelease bundleRelease --no-build-cache --no-daemon
 
       - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
         run: |
