@@ -187,7 +187,7 @@ const App = () => {
       }
     };
 
-    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 3000);
+    const initialTimer = setTimeout(runBackgroundSyncToMaamoul, 5000); // زيادة وقت البدء الأولي لتفادي تضارب الحفظ أول مرة
     const interval = setInterval(runBackgroundSyncToMaamoul, 60000);
 
     return () => {
@@ -337,13 +337,25 @@ const App = () => {
         return (
           <ProductionManager 
             {...props} 
-            onSaveProduction={(p) => setProductionData(prev => [...prev, p])} 
-            onSaveWaste={(w) => setWaste(prev => [...prev, w])} 
+            onSaveProduction={(p) => {
+              setProductionData(prev => {
+                const nextProduction = [...prev, p];
+                saveLocally('productionData', nextProduction);
+                return nextProduction;
+              });
+            }} 
+            onSaveWaste={(w) => {
+              setWaste(prev => {
+                const nextWaste = [...prev, w];
+                saveLocally('waste', nextWaste);
+                return nextWaste;
+              });
+            }} 
           />
         );
       
       case 'Inventory': 
-        // تمرير المنتجات المفروزة والمصنفة بذكاء ERO بدلاف من المخزن الشامل لحل مشكلة ظهور المواد الخام
+        // تمرير المنتجات المفروزة والمصنفة بذكاء ERO بدلاً من المخزن الشامل لحل مشكلة ظهور المواد الخام
         return <Inventory {...props} categories={erpCategorizedStock.finished} rawCategories={erpCategorizedStock.raw} onSave={handleSavePurchase} onAddItem={(item) => setStock(prev => [...prev, item])} />;
       
       case 'Waste': 
