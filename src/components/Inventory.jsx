@@ -20,27 +20,30 @@ const Inventory = ({
   // ضمان أننا نتعامل مع مصفوفة دائماً لتجنب أي توقف في التطبيق
   const dataList = Array.isArray(stock) ? stock : [];
 
-  // 🧠 منطق الفرز المعدل: تمرير أي منتج يخص قسم الإنتاج مهما كان اسمه إلى قسم المنتجات
+  // 🧠 منطق الفرز المعدل: تمرير المنتجات الجاهزة والمنتجة حديثاً من صفحة الإنتاج
   const finishedProductsData = dataList.filter(item => {
-    const name = (item.name || '').toString();
+    const name = (item.name || '').toString().toLowerCase();
     const department = (item.department || item.source || '').toString();
+    const category = (item.category || '').toString();
     
-    // شرط قسم الإنتاج: إذا كان المنتج قادماً من قسم الإنتاج أو يحتوي الاسم على كلمة إنتاج
-    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج');
+    // شرط قسم الإنتاج والتصنيف المزروع من صفحة الإنتاج (category: 'منتجات')
+    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج') || category === 'منتجات';
     // الشروط القديمة بناءً على الاسم
-    const isFinishedName = name.includes('نهائي') || name.includes('جاهز');
+    const isFinishedName = name.includes('نهائي') || name.includes('جاهز') || name.includes('معمول');
     
     return isFromProduction || isFinishedName;
   });
 
-  // الخامات: هي العناصر التي لا تنطبق عليها شروط المنتجات النهائية
+  // الخامات: هي العناصر التي لا تنطبق عليها شروط المنتجات النهائية تماماً (تطابقاً مع صفحة الإنتاج)
   const rawMaterialsData = dataList.filter(item => {
-    const name = (item.name || '').toString();
+    const name = (item.name || '').toString().toLowerCase();
     const department = (item.department || item.source || '').toString();
+    const category = (item.category || '').toString();
     
-    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج');
-    const isFinishedName = name.includes('نهائي') || name.includes('جاهز');
+    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج') || category === 'منتجات';
+    const isFinishedName = name.includes('نهائي') || name.includes('جاهز') || name.includes('معمول');
     
+    // استبعاد المنتجات الجاهزة لتظهر الخامات الصافية فقط
     return !(isFromProduction || isFinishedName);
   });
 
