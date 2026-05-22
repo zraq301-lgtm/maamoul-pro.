@@ -8,7 +8,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # أولاً: وظيفة بناء الأندرويد (تدمير كاش التشفير المعطوب برمجياً)
+  # أولاً: وظيفة بناء الأندرويد المتوافقة مع جافا 21
   # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -16,27 +16,26 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # إعدادات صارمة لمنع التداخل وقفل الملفات
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.configureondemand=false -Dorg.gradle.caching=false"
+      # إعدادات لضمان معالجة متوازنة وسريعة
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
 
     steps:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java 17
+      - name: 2. Setup Java 21 (حل مشكلة Unsupported class file)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21' # تم الترقية إلى 21 لتوافق مكتبات التشفير الحديثة
 
       - name: 3. Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: '24'
 
-      - name: 4. Deep Clean & Install (Force Clear Runner Cache)
+      - name: 4. Deep Clean & Install
         run: |
-          rm -rf ~/.gradle/caches/
           rm -rf node_modules package-lock.json android ios dist_web
           npm install --legacy-peer-deps
           npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
@@ -47,10 +46,10 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: 6. Inject Firebase, App Identity & Destruct Broken Cache
+      - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
-          # 1. حقن ملف الجوجل الافتراضي
+          # حقن ملف جوجل الخاص بتطبيق زاد الخير الحالي
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -74,28 +73,14 @@ jobs:
 
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
-          PROJECT_GRADLE="android/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # 2. تعديل الهوية والأسماء الأساسية والتسميات البرمجية
+          # استبدال المعرفات والأسماء برمجياً لاسم "زاد الخير" الجديد
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
-          # 3. إجبار استبدال إصدار المكتبة على مستوى كافة التكوينات الفرعية
-          echo "
-          subprojects {
-              project.configurations.all {
-                  resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-                      if (details.requested.group == 'org.bouncycastle') {
-                          details.useVersion '1.74'
-                          details.because 'Fix GitHub Actions File Locking Issue'
-                      }
-                  }
-              }
-          }" >> $PROJECT_GRADLE
-
-          # 4. حقن الصلاحيات المطلوبة للإشعارات والشبكة والمخازن
+          # إضافة صلاحيات التنبيهات والشبكة داخل ملف المانيفست المولد
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
@@ -109,15 +94,11 @@ jobs:
           fi
           npx capacitor-assets generate --android
 
-      - name: 8. Pre-clean BouncyCastle & Build Android Binaries
+      - name: 8. Build Android Binaries (With Java 21 Support)
         run: |
-          # سكربت يبحث عن مجلد كاش الـ Jar المتسبب في الأزمة ويمسحه نهائياً قبل استدعاء Gradle
-          find ~/.gradle/caches/ -name "*bcprov-jdk18on-1.79.jar*" -exec rm -rf {} + || true
-          
           cd android
           chmod +x gradlew
-          # تشغيل البناء مع إيقاف الكاش كلياً لمنع إعادة توليد الملف المعطوب
-          ./gradlew clean assembleRelease bundleRelease --no-build-cache --no-daemon --stacktrace
+          ./gradlew clean assembleRelease bundleRelease --no-daemon
 
       - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
         run: |
