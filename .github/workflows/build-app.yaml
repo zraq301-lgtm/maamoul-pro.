@@ -88,26 +88,37 @@ jobs:
           # ثالثاً: إدراج الأذونات القياسية المطلوبة في نظام أندرويد بشكل احترافي وسليم
           sed -i '/<manifest[^>]*>/a \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' $MANIFEST
 
-      - name: 8. Generate App Icons From Existing Resource
+      - name: 8. Core Native Icon Generation (Bypassing capacitor-assets)
         run: |
-          # إنشاء مجلدات الموارد لـ Capacitor Assets
-          mkdir -p assets resources
+          # تنظيف كامل لكافة مجلدات ومحتويات الـ mipmap التالفة لتهيئة أندرويد من الصفر
+          rm -rf android/app/src/main/res/mipmap*
           
+          # تجهيز أيقونة المصدر الأساسية (إذا لم تكن موجودة يتم توليد واحدة بلون أخضر ناصع)
+          BASE_SRC="base_icon.png"
           if [ -f "resources/icon-foreground.png" ]; then
-            # نسخ وتجهيز الأيقونة الحقيقية لتطابق متطلبات أداة الإنشاء التلقائي
-            cp resources/icon-foreground.png assets/icon.png
-            cp resources/icon-foreground.png assets/icon-only.png
-            cp resources/icon-foreground.png resources/icon.png
+            convert "resources/icon-foreground.png" -resize 512x512 png24:$BASE_SRC
+          elif [ -f "resources/icon.png" ]; then
+            convert "resources/icon.png" -resize 512x512 png24:$BASE_SRC
           else
-            # حماية احتياطية صارمة وتوليد صورة PNG سليمة 100% متوافقة مع معايير AAPT2
-            convert -size 512x512 xc:#2ecc71 png24:assets/icon.png
-            cp assets/icon.png assets/icon-only.png
-            cp assets/icon.png resources/icon.png
-            cp assets/icon.png resources/icon-foreground.png
+            convert -size 512x512 xc:#2ecc71 png24:$BASE_SRC
           fi
           
-          # تشغيل أداة التوليد الرسمية لبناء الأيقونات لكافة شاشات الأندرويد
-          npx capacitor-assets generate --android
+          # مصفوفة مجلدات الأندرويد القياسية للمقاسات والمقاس المقابل لها بالبكسل
+          declare -A RESOLUTIONS=( ["mipmap-ldpi"]="36x36" ["mipmap-mdpi"]="48x48" ["mipmap-hdpi"]="72x72" ["mipmap-xhdpi"]="96x96" ["mipmap-xxhdpi"]="144x144" ["mipmap-xxxhdpi"]="192x192" )
+          
+          # توليد الأيقونات الكلاسيكية والأيقونات الأمامية التكيفية بشكل خام مباشر متوافق 100% مع AAPT2
+          for DIR in "${!RESOLUTIONS[@]}"; do
+            TARGET_DIR="android/app/src/main/res/$DIR"
+            mkdir -p "$TARGET_DIR"
+            SIZE="${RESOLUTIONS[$DIR]}"
+            
+            # توليد الأيقونة القياسية
+            convert $BASE_SRC -resize $SIZE png24:"$TARGET_DIR/ic_launcher.png"
+            # توليد الأيقونة الدائرية
+            convert $BASE_SRC -resize $SIZE png24:"$TARGET_DIR/ic_launcher_round.png"
+            # توليد أيقونة المقدمة (المسؤولة عن الخطأ السابق) لتعمل بشكل سليم تماماً
+            convert $BASE_SRC -resize $SIZE png24:"$TARGET_DIR/ic_launcher_foreground.png"
+          done
 
       - name: 9. Build Production Binaries (Gradle Execution)
         run: |
