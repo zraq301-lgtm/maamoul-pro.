@@ -243,18 +243,26 @@ const App = () => {
     const cashBalance = totalIncome - (totalExp + totalPurchasesCash);
     const stockValue = stock.reduce((sum, item) => sum + ((parseFloat(item.balance) || 0) * (parseFloat(item.price) || 0)), 0);
 
-  return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
+    return { totalIncome, totalExpenses: totalExp, cashBalance, netProfit: totalIncome - totalExp - totalPurchasesCash, stockValue };
   }, [salesData, expenses, inventory, stock]);
 
   // ==========================================
-  // [ذكاء تصنيف ERO المضاف للمخزون القادم]
+  // [ذكاء تصنيف ERP المضاف للمخزون القادم]
   // ==========================================
   const erpCategorizedStock = useMemo(() => {
     const items = stock || [];
-    // فرز وتوزيع المنتجات الجاهزة والنهائية بناءً على الكلمة الدليليلة
-    const finished = items.filter(item => (item.name || '').toString().includes('نهائي'));
-    // فرز وتوزيع المواد الخام (باقي العناصر التي لا تحتوي على كلمة نهائي)
-    const raw = items.filter(item => !(item.name || '').toString().includes('نهائي'));
+    // فرز وتوزيع المنتجات الجاهزة والنهائية بناءً على الكلمة الدليلية والتصنيف الممرر من الإنتاج
+    const finished = items.filter(item => {
+      const name = (item.name || '').toString();
+      const category = (item.category || '').toString();
+      return name.includes('نهائي') || name.includes('جاهز') || category === 'منتجات';
+    });
+    // فرز وتوزيع المواد الخام (باقي العناصر التي لا تنطبق عليها شروط المنتجات النهائية)
+    const raw = items.filter(item => {
+      const name = (item.name || '').toString();
+      const category = (item.category || '').toString();
+      return !(name.includes('نهائي') || name.includes('جاهز') || category === 'منتجات');
+    });
     
     return { finished, raw };
   }, [stock]);
@@ -326,10 +334,16 @@ const App = () => {
         return <Sales {...props} onSaveSales={(s) => setSalesData(prev => [...prev, s])} />;
       
       case 'ProductionManager': 
-        return <ProductionManager {...props} onSaveProduction={(p) => setProductionData(prev => [...prev, p])} />;
+        return (
+          <ProductionManager 
+            {...props} 
+            onSaveProduction={(p) => setProductionData(prev => [...prev, p])} 
+            onSaveWaste={(w) => setWaste(prev => [...prev, w])} 
+          />
+        );
       
       case 'Inventory': 
-        // تمرير المنتجات المفروزة والمصنفة بذكاء ERO بدلاً من المخزن الشامل لحل مشكلة ظهور المواد الخام
+        // تمرير المنتجات المفروزة والمصنفة بذكاء ERO بدلاف من المخزن الشامل لحل مشكلة ظهور المواد الخام
         return <Inventory {...props} categories={erpCategorizedStock.finished} rawCategories={erpCategorizedStock.raw} onSave={handleSavePurchase} onAddItem={(item) => setStock(prev => [...prev, item])} />;
       
       case 'Waste': 
