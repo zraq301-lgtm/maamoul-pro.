@@ -98,8 +98,10 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
-          ./gradlew bundleRelease
+          # تنظيف الكاش المحلي وتمرير جافا آرجومنت لتخطي خطأ الـ Jar المكسور
+          ./gradlew clean
+          ./gradlew assembleRelease -Dorg.gradle.jvmargs="-Xmx2048m -Djdk.lang.Process.launchMechanism=vfork"
+          ./gradlew bundleRelease -Dorg.gradle.jvmargs="-Xmx2048m -Djdk.lang.Process.launchMechanism=vfork"
 
       - name: 9. Sign APK & AAB (Nawh Credentials)
         run: |
