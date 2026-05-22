@@ -1,4 +1,4 @@
-name: "Roqa Clean Production Build"
+name: "Zad Elkhair Production Build"
 
 on:
   push:
@@ -7,6 +7,9 @@ on:
   workflow_dispatch:
 
 jobs:
+  # -------------------------------------------------------------
+  # أولاً: وظيفة بناء الأندرويد (تم الاحتفاظ بها كما هي تماماً)
+  # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -33,8 +36,8 @@ jobs:
         run: |
           rm -rf node_modules package-lock.json android ios dist_web
           npm install --legacy-peer-deps
-          # تثبيت الإضافات الضرورية لضمان وجودها
-          npm install onesignal-cordova-plugin @capacitor/push-notifications @capacitor/local-notifications --save --legacy-peer-deps
+          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
+          npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
           npm run build
 
       - name: 5. Initialize Android (Fresh Start)
@@ -42,22 +45,22 @@ jobs:
           npx cap add android
           npx cap sync android
 
-      - name: 6. Inject Firebase, App Identity & Ad Network (Start.io)
+      - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
-          # حقن ملف جوجل
+          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.zadelkhair.app)
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
               "project_number": "162488255991",
-              "project_id": "raqqa-43dc8",
-              "storage_bucket": "raqqa-43dc8.firebasestorage.app"
-            },
+              "project_id": "mamoul-app",
+              "storage_bucket": "mamoul-app.appspot.com"
+            } ,
             "client": [
               {
                 "client_info": {
                   "mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2",
-                  "android_client_info": { "package_name": "com.raqqa.app" }
+                  "android_client_info": { "package_name": "com.zadelkhair.app" }
                 },
                 "api_key": [ { "current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ" } ],
                 "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
@@ -67,65 +70,60 @@ jobs:
           }
           EOF
 
-          # ملفات الإعدادات
           STRINGS="android/app/src/main/res/values/strings.xml"
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # تعديل اسم التطبيق والحزمة
-          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">رقة<\/string>/' $STRINGS
-          sed -i 's/namespace ".*"/namespace "com.raqqa.app"/' $APP_GRADLE
-          sed -i 's/applicationId ".*"/applicationId "com.raqqa.app"/' $APP_GRADLE
+          # تعديل اسم التطبيق إلى "زاد الخير" والحزمة إلى com.zadelkhair.app
+          sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
+          sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
+          sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
-          # إضافة الأذونات اللازمة (الإنترنت، الإشعارات، التسجيل)
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' $MANIFEST
-
-          # إضافة معرفات Start.io داخل وسم <application> في المانيفست
-          # تم إضافة App ID: 203477356
-          sed -i '/<application[^>]*>/a \        <meta-data android:name="com.startapp.sdk.APPLICATION_ID" android:value="203477356" />' $MANIFEST
+          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
         run: |
           mkdir -p assets
-          # البحث عن الصور ونسخها للأصول
-          find . -name "icon-only.png" -exec cp {} assets/icon-only.png \;
-          find . -name "icon-background.png" -exec cp {} assets/icon-background.png \;
-          find . -name "icon-foreground.png" -exec cp {} assets/icon-foreground.png \;
+          # التأكد من وجود الأيقونة في المسار المطلوب واستنساخها للأصول
+          if [ -f "resources/icon-foreground.png" ]; then
+            cp resources/icon-foreground.png assets/icon-only.png
+            cp resources/icon-foreground.png assets/icon.png
+          elif [ -f "icon-only.png" ]; then
+            cp icon-only.png assets/icon-only.png
+          fi
           npx capacitor-assets generate --android
 
       - name: 8. Build Android Binaries
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew clean
           ./gradlew assembleRelease
           ./gradlew bundleRelease
 
-      - name: 9. Sign APK & AAB
+      - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
         run: |
-          # توليد مفتاح توقيع مؤقت
-          keytool -genkey -v -keystore roqa_release.jks -alias roqa_alias -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass "roqa_pass_2026" -keypass "roqa_pass_2026" \
-            -dname "CN=RoqaApp, OU=Dev, O=Roqa, L=Cairo, S=Egypt, C=EG"
+          # توليد مفتاح توقيع جديد باسم زاد الخير
+          keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
+            -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
           
-          # توقيع الـ APK
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks roqa_release.jks \
-            --ks-pass pass:"roqa_pass_2026" --out Roqa-Final-Signed.apk "$APK_PATH"
+          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
+            --ks-pass pass:"mamoul_pass_2026" --out ZadElkhair-Final.apk "$APK_PATH"
           
-          # توقيع الـ AAB
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
-          jarsigner -keystore roqa_release.jks -storepass "roqa_pass_2026" "$AAB_PATH" roqa_alias
-          cp "$AAB_PATH" Roqa-Final-Signed.aab
+          jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
+          cp "$AAB_PATH" ZadElkhair-Final.aab
 
       - name: 10. Publish Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: "Roqa Production Build v${{ github.run_number }}"
+          name: "Zad Elkhair Build v${{ github.run_number }}"
           files: |
-            Roqa-Final-Signed.apk
-            Roqa-Final-Signed.aab
-            roqa_release.jks
+            ZadElkhair-Final.apk
+            ZadElkhair-Final.aab
+            zadelkhair.jks
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
