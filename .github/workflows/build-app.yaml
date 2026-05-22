@@ -8,7 +8,7 @@ on:
 
 jobs:
   # -------------------------------------------------------------
-  # أولاً: وظيفة بناء الأندرويد (تمت ترقية Java إلى 21 لحل توافقية SQLite)
+  # بناء الأندرويد مع نقل مسار الـ Cache لتجنب قيود الحماية
   # -------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -16,16 +16,18 @@ jobs:
       contents: write
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # نقل مجلد الكاش بالكامل إلى داخل مجلد العمل الحالي لتفادي مشاكل الصلاحيات وفك الـ Jar
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
 
     steps:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java 21 (تم التحديث لحل توافقية حزمة التشفير bcprov)
+      - name: 2. Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '17'
 
       - name: 3. Setup Node.js 24
         uses: actions/setup-node@v4
@@ -36,7 +38,6 @@ jobs:
         run: |
           rm -rf node_modules package-lock.json android ios dist_web
           npm install --legacy-peer-deps
-          # تثبيت مكتبات الإشعارات المحلية والـ SQLite للحسابات
           npm install @capacitor/local-notifications @capacitor-community/sqlite @capacitor/preferences --save --legacy-peer-deps
           npm run build
 
@@ -48,7 +49,6 @@ jobs:
       - name: 6. Inject Firebase & App Identity (Zad Elkhair)
         shell: bash
         run: |
-          # حقن ملف جوجل (تم تحديث اسم الحزمة إلى com.zadelkhair.app)
           cat <<EOF > android/app/google-services.json
           {
             "project_info": {
@@ -74,18 +74,15 @@ jobs:
           APP_GRADLE="android/app/build.gradle"
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           
-          # تعديل اسم التطبيق إلى "زاد الخير" والحزمة إلى com.zadelkhair.app
           sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">زاد الخير<\/string>/' $STRINGS
           sed -i 's/namespace ".*"/namespace "com.zadelkhair.app"/' $APP_GRADLE
           sed -i 's/applicationId ".*"/applicationId "com.zadelkhair.app"/' $APP_GRADLE
           
-          # إضافة أذونات الإشعارات المحلية والجدولة الدقيقة (للتنبيه بنقص المخزن)
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />' $MANIFEST
 
       - name: 7. Generate App Icons & Splash
         run: |
           mkdir -p assets
-          # التأكد من وجود الأيقونة في المسار المطلوب واستنساخها للأصول
           if [ -f "resources/icon-foreground.png" ]; then
             cp resources/icon-foreground.png assets/icon-only.png
             cp resources/icon-foreground.png assets/icon.png
@@ -98,24 +95,16 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          # إيقاف الـ Daemon تماماً وتجاوز قفل الملفات لضمان معالجة حزم جافا نظيفة
-          ./gradlew clean --refresh-dependencies --no-daemon
-          ./gradlew assembleRelease --no-daemon
-          ./gradlew bundleRelease --no-daemon
+          # تنظيف الكاش المحلي الجديد والتأكد من البناء بدون أي تداخلات
+          ./gradlew clean assembleRelease bundleRelease --no-daemon
 
-      - name: 9. Sign APK & AAB (Zad Elkhair Credentials)
+      - name: 9. Prepare Unsigned Binaries for Release
         run: |
-          # توليد مفتاح توقيع جديد باسم زاد الخير
-          keytool -genkey -v -keystore zadelkhair.jks -alias zadelkhair_alias -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass "mamoul_pass_2026" -keypass "mamoul_pass_2026" \
-            -dname "CN=ZadElkhairApp, OU=Production, O=ZadElkhair, L=Cairo, C=EG"
-          
+          # العثور على ملف الـ APK والـ AAB الناتجين بدون توقيع يدوي
           APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          /usr/local/lib/android/sdk/build-tools/34.0.0/apksigner sign --ks zadelkhair.jks \
-            --ks-pass pass:"mamoul_pass_2026" --out ZadElkhair-Final.apk "$APK_PATH"
-          
           AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
-          jarsigner -keystore zadelkhair.jks -storepass "mamoul_pass_2026" "$AAB_PATH" zadelkhair_alias
+          
+          cp "$APK_PATH" ZadElkhair-Final.apk
           cp "$AAB_PATH" ZadElkhair-Final.aab
 
       - name: 10. Publish Release
@@ -126,6 +115,5 @@ jobs:
           files: |
             ZadElkhair-Final.apk
             ZadElkhair-Final.aab
-            zadelkhair.jks
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
