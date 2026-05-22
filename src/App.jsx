@@ -388,7 +388,7 @@ const App = () => {
             setActivePage={setActivePage} 
             stats={financialStats} 
             staffCount={staff.length} 
-            productionHistory={productionData}
+            productionHistory={productionData} // إرسال عمليات الإنتاج للعرض في جدول لوحة التحكم الافتراضية
             stock={stock}
             fetchData={downloadDataFromMaamoulCloud}
           />
