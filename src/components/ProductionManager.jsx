@@ -2,11 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Factory, Save, ArrowLeft, AlertTriangle, Box, Info, Calendar, Clock, Plus, Trash2, Layers, Zap } from 'lucide-react';
 
 const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, setStock }) => {
-  // تطبيق نفس منطق صفحة الخامات (استبعاد الكلمات "معمول" أو "جاهز") لضمان تطابق البيانات تماماً
+  // تطبيق نفس المنطق المركب لصفحة المخزن لضمان تصفية الخامات الصافية تماماً وتطابق البيانات
   const rawMaterials = (stock || []).filter(item => {
     if (!item.name) return false;
     const name = item.name.toLowerCase();
-    return !(name.includes("معمول") || name.includes("جاهز"));
+    const category = (item.category || '').toString();
+    const department = (item.department || item.source || '').toString();
+
+    const isFromProduction = department.includes('إنتاج') || department.includes('production') || name.includes('إنتاج') || category === 'منتجات';
+    const isFinishedName = name.includes('نهائي') || name.includes('جاهز') || name.includes('معمول');
+
+    // استبعاد المنتجات الجاهزة تماماً لتظهر الخامات الصافية القابلة للسحب والخصم
+    return !(isFromProduction || isFinishedName);
   });
 
   // حالة لتخزين كائن المدخلات الخاص بالخامات لتجنب فقدان التركيز (Focus) أثناء الكتابة
@@ -79,7 +86,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     // كائن جديد لتسجيل الخامات المستهلكة فعلياً فقط (أكبر من 0) لحفظها في السجل التاريخي
     const actualConsumedIngredients = {};
 
-    // --- منطق خصم الخامات (النقص من المخزن) ---
+    // --- منطق خصم الخامات (النقص من المخزن فورا) ---
     for (const [ingName, requiredQty] of Object.entries(ingredientsInputs)) {
       if (requiredQty <= 0) continue;
       
@@ -127,7 +134,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
 
     const costPerCarton = totalActualCost / totalProductionUnits;
 
-    // --- منطق إضافة المنتج النهائي للمخزن وتوجيهه لقسم المنتجات ---
+    // --- منطق إضافة المنتج النهائي للمخزن وتوجيهه مباشرة لقسم المنتجات بناءً على الفلاتر المشتركة ---
     formData.products.forEach(prod => {
       if (prod.quantity <= 0) return;
 
@@ -144,6 +151,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         productInStock.balance = (productInStock.balance || 0) + parseFloat(prod.quantity);
         productInStock.price = costPerCarton; // تحديث السعر لآخر تكلفة إنتاج
         productInStock.category = 'منتجات'; 
+        productInStock.department = 'إنتاج';
       } else {
         updatedStock.push({
           id: Date.now() + Math.random(),
@@ -151,6 +159,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
           balance: parseFloat(prod.quantity),
           unit: 'كرتونة',
           category: 'منتجات', 
+          department: 'إنتاج',
           batches: [newBatch],
           price: costPerCarton
         });
@@ -160,10 +169,10 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
     // تحديث المخزن الرئيسي الفعلي في مكون الأب بالكميات المخصومة والمضافة الجديدة
     setStock(updatedStock);
     
-    // حفظ السجل التاريخي بالخامات المسحوبة فعلياً فقط بدلاً من إرسال كل الخامات الصفريّة
+    // حفظ السجل التاريخي بالخامات المسحوبة فعلياً فقط
     onSaveProduction({ 
       ...formData, 
-      ingredients: actualConsumedIngredients, // هنا تم تمرير المستهلك الفعلي فقط
+      ingredients: actualConsumedIngredients, 
       id: Date.now(),
       totalActualCost: totalActualCost.toFixed(2),
       actualUnitCost: costPerCarton.toFixed(2),
@@ -181,7 +190,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
       });
     }
 
-    alert(`✅ تم الإنتاج بنجاح!\n1. تم خصم الخامات من المخزن الفعلي\n2. تم إضافة المنتج الجاهز لقسم المنتجات بالمخزن\n3. التكلفة الإجمالية: ${totalActualCost.toFixed(2)} ج.م`);
+    alert(`✅ تم الإنتاج بنجاح!\n1. تم خصم الخامات من المخزن الفعلي\n2. تم إضافة المنتج الجاهز لقسم المنتجات بالمخزن بنجاح\n3. التكلفة الإجمالية: ${totalActualCost.toFixed(2)} ج.م`);
     if (onBack) onBack();
   };
 
@@ -227,7 +236,7 @@ const ProductionManager = ({ stock = [], onSaveProduction, onSaveWaste, onBack, 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '15px' }}>
           {rawMaterials.length === 0 ? (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#94a3b8', padding: '10px', fontSize: '16px' }}>
-              لا توجد خامات متوفرة حالياً
+              لا توجد خامات متوفرة حالياً بالمخزن
             </div>
           ) : (
             rawMaterials.map(item => {
