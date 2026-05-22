@@ -37,8 +37,23 @@ const Sales = ({ onBack, onSaveSale, customers = [], stock = [] }) => {
     e.preventDefault();
     if (!sale.customerName || !sale.quantity || !sale.pricePerUnit || !sale.productName) { alert("يرجى إكمال جميع بيانات البيع"); return; }
     if (parseFloat(sale.quantity) > availableQty) { alert(`الكمية المطلوبة (${sale.quantity}) تتجاوز الرصيد المتوفر (${availableQty})`); return; }
-    onSaveSale({ ...sale, total: parseFloat(sale.quantity) * parseFloat(sale.pricePerUnit), id: Date.now() });
-    alert("تم تسجيل عملية البيع بنجاح"); onBack();
+    
+    // البحث عن بيانات العميل كاملة لربط الفاتورة بقسم ومجلد العملاء بشكل صحيح
+    const currentCustomer = customers.find(c => c.name === sale.customerName);
+    
+    // تجهيز كائن البيانات المطور وإرساله لـ OnSaveSale ليعمل الربط فورا
+    onSaveSale({ 
+      ...sale, 
+      quantity: parseFloat(sale.quantity),
+      pricePerUnit: parseFloat(sale.pricePerUnit),
+      total: parseFloat(sale.quantity) * parseFloat(sale.pricePerUnit), 
+      id: Date.now(),
+      customerId: currentCustomer ? currentCustomer.id : null, // ربط مباشر بمعرف العميل لقسم العملاء
+      customerDetails: currentCustomer || null
+    });
+    
+    alert("تم تسجيل عملية البيع بنجاح"); 
+    onBack();
   };
 
   return (
