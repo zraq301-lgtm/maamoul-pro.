@@ -77,8 +77,8 @@ jobs:
           # نسخ أيقونتك الخاصة المرفوعة بالمسار المذكور إلى المجلد باسم icon.png المعياري
           cp resources/icon-foreground.png assets/icon.png
           
-          # أمر التوليد المخصص للأيقونات فقط (--icon) لمنع البحث عن الـ Splash أو التسبب في انهيار البناء
-          npx capacitor-assets generate --android --icon
+          # استخدام الأمر الرسمي الصحيح لتوليد الأيقونات فقط وتجنب الـ Splash تماماً
+          npx capacitor-assets generate --android --asset-types icon
 
       - name: 7. Native Android Compilation (APK & AAB)
         working-directory: ./android
