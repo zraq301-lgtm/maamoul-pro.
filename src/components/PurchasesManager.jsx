@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Package, Truck, Calendar, Hash, DollarSign, ArrowRight, Save, ShoppingCart, Bell, Table, AlertTriangle, User } from 'lucide-react';
 import DataGrid from './DataGrid';
 
-const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigger, inventory = [] }) => {
+const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigger, inventory = [], suppliers = [] }) => {
   const [activeView, setActiveView] = useState('menu');
   const [isNewItem, setIsNewItem] = useState(false);
   
@@ -55,6 +55,7 @@ const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigg
         id: `PO-${Date.now()}`,
         date: new Date().toISOString(),
         vendorId: orderRequest.supplier || 'مورد عام',
+        supplierName: orderRequest.supplier || 'مورد عام',
         status: 'pending',
         items: [{
           productId: orderRequest.item,
@@ -83,6 +84,7 @@ const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigg
       id: `INV-${Date.now()}`,
       date: formData.date,
       vendorId: formData.supplier || 'مورد عام',
+      supplierName: formData.supplier || 'مورد عام',
       paymentMethod: formData.paymentMethod,
       status: 'completed',
       totalAmount: total,
@@ -188,7 +190,13 @@ const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigg
               <option value="">اختر صنف...</option>
               {stock.map(s => <option key={s.id} value={s.name}>{s.name} (المتاح: {s.balance || s.stock})</option>)}
             </select>
-            <input className="glass-input" placeholder="اسم المورد" value={orderRequest.supplier} onChange={e => setOrderRequest({...orderRequest, supplier: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }} />
+            
+            <select className="glass-input" required value={orderRequest.supplier} onChange={e => setOrderRequest({...orderRequest, supplier: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <option value="">اختر المورد المستهدف...</option>
+              {suppliers.map(sup => <option key={sup.id || sup.name} value={sup.name}>{sup.name}</option>)}
+              <option value="مورد عام">مورد عام</option>
+            </select>
+
             <input type="number" className="glass-input" required placeholder="الكمية المطلوبة" value={orderRequest.neededQty} onChange={e => setOrderRequest({ ...orderRequest, neededQty: e.target.value })} style={{ width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }} />
             <button type="submit" style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: '#f59e0b', color: 'white', fontWeight: 'bold' }}>إرسال الطلب</button>
           </form>
@@ -215,7 +223,13 @@ const PurchasesManager = ({ onPurchaseComplete, onBack, stock = [], onOrderTrigg
               <input type="number" className="glass-input" placeholder="الكمية" required value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value })} style={{ padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }} />
               <input type="number" className="glass-input" placeholder="السعر" required value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} style={{ padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0' }} />
             </div>
-            <input className="glass-input" placeholder="اسم المورد" value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} style={{ width: '100%', padding: '12px', marginBottom: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' }} />
+            
+            <select className="glass-input" required value={formData.supplier} onChange={e => setFormData({ ...formData, supplier: e.target.value })} style={{ width: '100%', padding: '12px', marginBottom: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+              <option value="">اختر المورد...</option>
+              {suppliers.map(sup => <option key={sup.id || sup.name} value={sup.name}>{sup.name}</option>)}
+              <option value="مورد عام">مورد عام</option>
+            </select>
+
             <select className="glass-input" value={formData.paymentMethod} onChange={e => setFormData({ ...formData, paymentMethod: e.target.value })} style={{ width: '100%', padding: '12px', marginBottom: '15px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
               <option value="كاش">كاش</option>
               <option value="آجل">آجل</option>
