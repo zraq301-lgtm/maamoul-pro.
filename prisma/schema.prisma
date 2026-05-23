@@ -1,0 +1,41 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NILEDB_URL")
+}
+
+// جدول المصانع (لكل مصنع مساحة خاصة به)
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  // العلاقات
+  products  Product[]
+  orders    Order[]
+}
+
+// جدول المنتجات (الخاص بكل مصنع)
+model Product {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  price     Decimal
+  stock     Int
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+// جدول الطلبات/الفواتير
+model Order {
+  id        String   @id @default(uuid())
+  tenantId  String
+  total     Decimal
+  status    String
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
