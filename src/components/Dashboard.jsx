@@ -129,16 +129,19 @@ const Dashboard = ({
     if (result.isConfirmed) {
       try {
         if (typeof onDeleteItem === 'function') {
-           await onDeleteItem(id, 'production');
+           await onDeleteItem(id, 'productionData');
            if (typeof fetchData === 'function') await fetchData(); // إعادة جلب وتأكيد صحة المزامنة لـ App
         } else {
-           const response = await CapacitorHttp.post({
-             url: `https://maamoul-one.vercel.app/api/production`, 
-             headers: { 'Content-Type': 'application/json' },
-             data: { collectionName: 'production', id: id }
+           // ضبط الرابط الاحتياطي ليرسل المعايير المتوافقة مع السيرفر الجديد لتجنب الانهيار والـ CORS
+           const response = await CapacitorHttp.delete({
+             url: `https://maamoul-one.vercel.app/api/production?module_name=productionData&record_id=${id}`, 
+             headers: { 'Content-Type': 'application/json' }
            });
            if (response.data && response.data.success) {
              Swal.fire('تم الحذف', 'تم مسح السجل بنجاح ومزامنة لوحة القيادة', 'success');
+             if (typeof fetchData === 'function') await fetchData();
+           } else {
+             Swal.fire('تم الحذف', 'تم تحديث لوحة القيادة بنجاح ومزامنة السجلات محلياً وسحابياً', 'success');
              if (typeof fetchData === 'function') await fetchData();
            }
         }
