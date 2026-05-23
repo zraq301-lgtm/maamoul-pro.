@@ -1,101 +1,91 @@
-import { ObjectId } from "mongodb";
-import clientPromise from "../lib/mongodb.js";
+import { MongoClient, ObjectId } from "mongodb";
+
+const uri = process.env.MONGODB_URI;
+let clientPromise;
+
+if (!uri) throw new Error("MONGODB_URI is missing");
+
+if (process.env.NODE_ENV === "development") {
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(uri);
+    global._mongoClientPromise = client.connect();
+  }
+  clientPromise = global._mongoClientPromise;
+} else {
+  const client = new MongoClient(uri);
+  clientPromise = client.connect();
+}
 
 export default async function handler(request, response) {
-  // 1. إعدادات CORS الشاملة والمرنة لمنع تعارض الأجهزة الذكية
+  // إعدادات CORS للسماح بالوصول من التطبيق
   response.setHeader('Access-Control-Allow-Origin', '*');
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS'); 
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  response.setHeader('Access-Control-Allow-Methods', 'POST, DELETE, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  // معالجة طلب OPTIONS (Preflight request) بشكل فوري لمنع توقف الـ Build والاتصال
-  if (request.method === 'OPTIONS') {
-    return response.status(200).end();
+  if (request.method === 'OPTIONS') return response.status(200).end();
+
+  // قبول POST و DELETE لزيادة التوافق
+  if (request.method !== 'POST' && request.method !== 'DELETE') {
+    return response.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // 2. قراءة مرنة لمعطيات الحذف للتغلب على قيود الخوادم وخطأ 405
-    // كود App.jsx يرسل ميثود DELETE ويضع المتغيرات في الرابط (request.query)
-    let collectionName = request.query?.module_name || request.body?.collectionName;
-    let id = request.query?.record_id || request.body?.id;
-
-    // تنظيف اسم المعرّف إذا كان يحتوي على لاحقة المجلّد السحابي لمنع فشل الاستعلام
-    if (id && typeof id === 'string' && id.endsWith('_records')) {
-      id = id.replace('_records', '');
-    }
-
-    // خريطة تصنيف وربط الموديولات الممررة من الواجهة إلى جداول قاعدة البيانات الفعلية
-    const moduleToCollectionMap = {
-      'stock': 'inventory_module',
-      'salesData': 'sales_module',
-      'inventory': 'purchases_module',
-      'productionData': 'manufacturing_module',
-      'expenses': 'dashboard_module',
-      'customers': 'customers_module',
-      'suppliers': 'suppliers_module',
-      'staff': 'staff_module',
-      'waste': 'waste_module',
-      'cashBook': 'financials_module'
-    };
-
-    // التحويل التلقائي لاسم الموديول إلى اسم الـ Collection الأصلي في MongoDB
-    if (moduleToCollectionMap[collectionName]) {
-      collectionName = moduleToCollectionMap[collectionName];
-    }
-
-    // التحقق الآمن من وجود اسم موديول مستهدف قبل المتابعة
-    if (!collectionName) {
-      return response.status(400).json({ error: 'المعطيات ناقصة: يرجى تحديد اسم الجدول أو الموديول المراد الحذف منه' });
-    }
-
     const client = await clientPromise;
-    const db = client.db();
+    const db = client.db("maamoul_db");
 
-    // 3. بناء مصفوفة الحالات المحتملة للمعرّف (الـ Query الذكي) لتغطية صيغ حفظ البيانات المختلفة
-    const orConditions = [
-      { id: id },
-      { id: isNaN(id) ? id : parseInt(id) }, 
+    // استخراج البيانات بدقة عالية من كل المصادر الممكنة
+    const body = request.body || {};
+    const query = request.query || {};
+    
+    // محاولة جلب اسم المجموعة (الافتراضي production)
+    const collectionName = body.collectionName || query.collectionName || "production";
+    
+    // محاولة جلب المعرف (ID) من الجسم أو الرابط أو الاستعلام
+    let id = body.id || query.id || body._id || query._id;
+    
+    // إذا لم يوجد ID، نحاول استخراجه من نهاية الرابط (URL)
+    if (!id) {
+        const parts = request.url.split('/');
+        id = parts[parts.length - 1].split('?')[0];
+    }
+
+    if (!id || id === 'production') {
+       return response.status(400).json({ success: false, message: "ID is required" });
+    }
+
+    // بناء شروط البحث (بما في ذلك تحويلات الأنواع)
+    let queryConditions = [
       { _id: id },
-      { _id: isNaN(id) ? id : parseInt(id) }
+      { id: id },
+      { id: isNaN(id) ? id : parseFloat(id) }
     ];
 
-    // 4. فحص وضبط حالة المعرّفات المعتمدة على نظام الـ ObjectId الخاص بـ MongoDB
-    if (typeof id === 'string' && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id)) {
-      try {
-        orConditions.push({ _id: new ObjectId(id) });
-        orConditions.push({ id: new ObjectId(id) });
-      } catch (e) {
-        console.log("فشل تحويل المعرف إلى ObjectId رغم تطابق الصيغة الظاهرية");
-      }
+    // إضافة الـ ObjectId إذا كان صالحاً (مهم جداً لـ MongoDB)
+    if (ObjectId.isValid(id)) {
+      queryConditions.push({ _id: new ObjectId(id) });
     }
 
-    // تجميع شروط الاستعلام للبحث المكثف عن العنصر
-    const query = { $or: orConditions };
-
-    // تنفيذ أمر الحذف داخل قاعدة البيانات
-    const result = await db.collection(collectionName).deleteOne(query);
-
-    // 5. إرجاع النتيجة وتأكيد الحذف بنجاح للتطبيق متوافقاً مع شرط التحديث الفوري (response.status === 200)
-    if (result.deletedCount === 1) {
-      return response.status(200).json({
-        success: true,
-        // تفعيل الـ Backticks هنا لعرض اسم الجدول الحقيقي بدلاً من النص البرمجي
-        message: `تم الحذف بنجاح من جدول [${collectionName}]`,
-        deletedCount: result.deletedCount
-      });
-    } else {
-      // إرجاع حالة نجاح 200 لتجنب انهيار التزامن التلقائي بالواجهة إذا حذف العنصر مسبقاً
-      return response.status(200).json({
-        success: false,
-        message: `تم تحديث السجل سحابياً (العنصر غير موجود بالسيرفر أو تم حذف المصفوفة مسبقاً في ${collectionName})`,
-        attemptedQuery: query
-      });
-    }
-
-  } catch (error) {
-    console.error('شهدت عملية الحذف خطأ في السيرفر:', error);
-    return response.status(500).json({
-      error: 'Internal Server Error',
-      details: error.message
+    const result = await db.collection(collectionName).deleteOne({
+      $or: queryConditions
     });
+
+    if (result.deletedCount >= 1) {
+      return response.status(200).json({ success: true, message: "تم الحذف بنجاح" });
+    } else {
+      // محاولة أخيرة بالاسم إذا كان الـ ID المرسل هو اسم المنتج بالخطأ
+      const name = body.name || query.name || id;
+      const finalTry = await db.collection(collectionName).deleteOne({
+        $or: [{ name: name }, { item: name }]
+      });
+
+      if (finalTry.deletedCount >= 1) {
+        return response.status(200).json({ success: true, message: "تم الحذف بواسطة الاسم" });
+      }
+
+      return response.status(404).json({ success: false, message: "العنصر غير موجود" });
+    }
+  } catch (error) {
+    console.error("API Error:", error);
+    return response.status(500).json({ error: error.message });
   }
 }
