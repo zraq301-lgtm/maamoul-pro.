@@ -1,26 +1,23 @@
-// services/PurchaseService.js
-import prisma from '../lib/prisma'; // كائن Prisma الموحد
+import { CapacitorHttp } from '@capacitor/core';
+
+const API_BASE_URL = 'https://maamoul-pro-five.vercel.app';
 
 export const PurchaseService = {
-  // إضافة مورد جديد
-  async createSupplier(data) {
-    return await prisma.supplier.create({ data });
-  },
-
-  // تسجيل طلب شراء (بمعاملة ذكية - Transaction)
+  // دالة المشتريات التي تستخدم CapacitorHttp للاتصال بالـ API
   async createPurchaseOrder(tenantId, orderData) {
-    return await prisma.$transaction(async (tx) => {
-      // 1. إنشاء الفاتورة
-      const order = await tx.order.create({
-        data: {
-          tenantId,
-          total: orderData.total,
-          status: 'PENDING'
-        }
-      });
-      // 2. تحديث المخزون (هنا يبدأ الذكاء)
-      // ... إضافة منطق تحديث المخزن هنا
-      return order;
-    });
+    const options = {
+      url: `${API_BASE_URL}/api/purchases/create`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      data: { tenantId, orderData }
+    };
+
+    try {
+      const response = await CapacitorHttp.request(options);
+      return response.data; // النتيجة قادمة من Vercel
+    } catch (error) {
+      console.error('خطأ في الاتصال بالـ API:', error);
+      throw error;
+    }
   }
 };
