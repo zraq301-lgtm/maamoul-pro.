@@ -196,10 +196,11 @@ const App = () => {
     };
   }, [stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, waste, cashBook, isInitialLoading]);
 
-  // 🎯 دالة الحذف السحابية المعدلة لتجنب خطأ 400
+  // 🎯 دالة الحذف السحابية المعدلة لتجنب خطأ 400 وتمرير الـ recordId الفعلي بنجاح
   const deleteCloudData = async (moduleName, recordId) => {
     try {
-      const deleteUrl = `https://maamoul-pro-five.vercel.app/api/delete-item?module_name=${moduleName}&record_id=${recordId}_records`;
+      // تم تعديل الرابط ليمرر معرّف العنصر الفعلي المباشر بدون تكرار الكلمات الوهمية
+      const deleteUrl = `https://maamoul-pro-five.vercel.app/api/delete-item?module_name=${moduleName}&record_id=${recordId}`;
 
       const options = {
         url: deleteUrl,
@@ -336,8 +337,8 @@ const App = () => {
           return filtered;
         });
       }
-      // 2. ترحيل الحذف السحابي فوراً لقاعدة البيانات السحابية
-      await deleteCloudData(targetModule.module, moduleKey);
+      // 2. ترحيل الحذف السحابي فوراً لقاعدة البيانات السحابية بتمير الـ itemId الحقيقي وليس الـ moduleKey
+      await deleteCloudData(targetModule.module, itemId);
       showSwal('تم حذف السجل وتحديث النظام بنجاح', 'success');
     } catch (error) {
       console.error("🚨 Universal Delete Error:", error);
