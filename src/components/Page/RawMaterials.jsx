@@ -12,7 +12,8 @@ const RawMaterials = ({ categories = [], onDeleteItem }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h3 style={{ margin: 0 }}>{item.name}</h3>
             {onDeleteItem && (
-              <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} style={{ cursor: 'pointer' }} />
+              /* تم تعديل سطر الضغطة هنا لتمرير id العنصر مع كلمة 'stock' لربطه بنظام الحذف الاحترافي الموحد */
+              <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id, 'stock')} style={{ cursor: 'pointer' }} />
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#666' }}>
