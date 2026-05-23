@@ -11,7 +11,8 @@ const FinishedProducts = ({ categories, onDeleteItem }) => {
         <div key={item.id} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h3 style={{ margin: 0 }}>{item.name}</h3>
-            <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem(item.id)} style={{ cursor: 'pointer' }} />
+            {/* تم ربط الدالة بـ 'stock' لتعمل بتوافق كامل مع السيرفر والـ App.jsx */}
+            <Trash2 size={18} color="#ef4444" onClick={() => onDeleteItem && onDeleteItem(item.id, 'stock')} style={{ cursor: 'pointer' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', color: '#666' }}>
             <span>المتوفر: <b>{item.balance}</b> علبة</span>
