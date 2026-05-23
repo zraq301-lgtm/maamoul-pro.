@@ -129,10 +129,10 @@ const Dashboard = ({
     if (result.isConfirmed) {
       try {
         if (typeof onDeleteItem === 'function') {
+           // استخدام دالة الحذف المباشرة الموحدة بنفس أسلوب الخامات تماماً لتجنب مشاكل الـ CORS والطلب القديم
            await onDeleteItem(id, 'productionData');
-           if (typeof fetchData === 'function') await fetchData(); // إعادة جلب وتأكيد صحة المزامنة لـ App
+           if (typeof fetchData === 'function') await fetchData(); 
         } else {
-           // ضبط الرابط الاحتياطي ليرسل المعايير المتوافقة مع السيرفر الجديد لتجنب الانهيار والـ CORS
            const response = await CapacitorHttp.delete({
              url: `https://maamoul-one.vercel.app/api/production?module_name=productionData&record_id=${id}`, 
              headers: { 'Content-Type': 'application/json' }
