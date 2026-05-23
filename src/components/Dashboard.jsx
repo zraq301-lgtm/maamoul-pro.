@@ -129,12 +129,12 @@ const Dashboard = ({
     if (result.isConfirmed) {
       try {
         if (typeof onDeleteItem === 'function') {
-           // استخدام دالة الحذف المباشرة الموحدة بنفس أسلوب الخامات تماماً لتجنب مشاكل الـ CORS والطلب القديم
-           await onDeleteItem(id, 'productionData');
+           // تم تعديل الموديول هنا إلى 'production' ليتوافق مع السيرفر والـ App مثل بقية الأقسام الناجحة
+           await onDeleteItem(id, 'production');
            if (typeof fetchData === 'function') await fetchData(); 
         } else {
            const response = await CapacitorHttp.delete({
-             url: `https://maamoul-one.vercel.app/api/production?module_name=productionData&record_id=${id}`, 
+             url: `https://maamoul-one.vercel.app/api/production?module_name=production&record_id=${id}`, 
              headers: { 'Content-Type': 'application/json' }
            });
            if (response.data && response.data.success) {
