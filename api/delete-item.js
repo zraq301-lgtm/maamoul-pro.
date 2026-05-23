@@ -78,6 +78,7 @@ export default async function handler(request, response) {
     if (result.deletedCount === 1) {
       return response.status(200).json({
         success: true,
+        // تفعيل الـ Backticks هنا لعرض اسم الجدول الحقيقي بدلاً من النص البرمجي
         message: `تم الحذف بنجاح من جدول [${collectionName}]`,
         deletedCount: result.deletedCount
       });
@@ -85,7 +86,7 @@ export default async function handler(request, response) {
       // إرجاع حالة نجاح 200 لتجنب انهيار التزامن التلقائي بالواجهة إذا حذف العنصر مسبقاً
       return response.status(200).json({
         success: false,
-        message: "تم تحديث السجل سحابياً (العنصر غير موجود بالسيرفر أو تم حذف المصفوفة مسبقاً)",
+        message: `تم تحديث السجل سحابياً (العنصر غير موجود بالسيرفر أو تم حذف المصفوفة مسبقاً في ${collectionName})`,
         attemptedQuery: query
       });
     }
