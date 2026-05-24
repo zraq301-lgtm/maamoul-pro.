@@ -1,8 +1,17 @@
 // داخل src/services/PurchaseService.js
 import { PrismaClient } from '@prisma/client';
 
-// تعريف الـ Client مرة واحدة لتجنب مشاكل الاتصال المتكرر
-const prisma = new PrismaClient();
+// تعريف الـ Client مع مراعاة بيئة الـ Serverless واستخدام NILEDB_URL
+const globalForPrisma = global;
+export const prisma = globalForPrisma.prisma || new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.NILEDB_URL, // استخدام المتغير الصحيح الخاص بقاعدة بياناتك
+    },
+  },
+});
+
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 export const PurchaseService = {
   async createPurchaseOrder(tenantId, orderData, idempotencyKey) {
