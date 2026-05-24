@@ -1,17 +1,35 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import apiService from './services/db'; 
+import apiService from './services/db';
 import { PurchaseService } from './services/PurchaseService';
 
-// ... (باقي الاستيرادات للمكونات تبقى كما هي)
+// استيراد المكونات
+import Dashboard from './components/Dashboard';
+import PurchasesManager from './components/PurchasesManager';
+import Sales from './components/Sales';
+import Waste from './components/Waste';
+import Expenses from './components/Expenses';
+import Suppliers from './components/Suppliers';
+import Financials from './components/Financials';
+import Reports from './components/Reports';
+import Customers from './components/Customers';
+import Inventory from './components/Inventory';
+import ProductionManager from './components/ProductionManager';
+import StaffManagement from './components/StaffManagement';
+import Settings from './components/Settings';
+
+import './App.css';
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
-  
-  // دالة تحميل البيانات
+
   const loadInitial = (key, initialValue) => {
-    try { const saved = localStorage.getItem(key); return saved ? JSON.parse(saved) : initialValue; } 
-    catch (e) { return initialValue; }
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : initialValue;
+    } catch (e) {
+      return initialValue;
+    }
   };
 
   const [state, setState] = useState({
@@ -27,18 +45,16 @@ const App = () => {
     staff: loadInitial('staff', [])
   });
 
-  // المزامنة المركزية للأقسام
   const updateModule = useCallback(async (moduleKey, newData) => {
-    // 1. تحديث الحالة المحلية
     setState(prev => ({ ...prev, [moduleKey]: newData }));
-    // 2. التخزين المحلي
     localStorage.setItem(moduleKey, JSON.stringify(newData));
-    // 3. المزامنة السحابية (اختياري حسب الموديول)
-    try { await apiService.syncModule(moduleKey, newData); } 
-    catch (err) { console.error(`Sync failed for ${moduleKey}`); }
+    try {
+      await apiService.syncModule(moduleKey, newData);
+    } catch (err) {
+      console.error(`Sync failed for ${moduleKey}`, err);
+    }
   }, []);
 
-  // دالة خاصة للمشتريات (تتعامل مع السيرفر والـ State)
   const handleSavePurchase = async (p) => {
     try {
       await PurchaseService.createPurchaseOrder("DEFAULT_TENANT", p);
@@ -51,29 +67,55 @@ const App = () => {
   };
 
   const renderPage = () => {
-    // تمرير البيانات ككائن واحد لتنظيم أفضل
-    const props = { 
-      data: state, 
-      onUpdate: updateModule, // المكونات تستخدم هذه الدالة لتحديث بياناتها
+    const props = {
+      data: state,
+      onUpdate: updateModule,
       onBack: () => setActivePage('dashboard')
     };
-    
+
     switch (activePage) {
-      case 'dashboard': return <Dashboard {...props} />;
+      case 'dashboard': return <Dashboard {...props} setActivePage={setActivePage} />;
       case 'PurchasesManager': return <PurchasesManager {...props} onSave={handleSavePurchase} />;
       case 'Sales': return <Sales {...props} />;
       case 'Inventory': return <Inventory {...props} onSave={handleSavePurchase} />;
-      // ... باقي الحالات
-      default: return <Dashboard {...props} />;
+      case 'Waste': return <Waste {...props} />;
+      case 'Expenses': return <Expenses {...props} />;
+      case 'Suppliers': return <Suppliers {...props} />;
+      case 'Financials': return <Financials {...props} />;
+      case 'Reports': return <Reports {...props} />;
+      case 'Customers': return <Customers {...props} />;
+      case 'ProductionManager': return <ProductionManager {...props} />;
+      case 'StaffManagement': return <StaffManagement {...props} />;
+      case 'Settings': return <Settings {...props} />;
+      default: return <Dashboard {...props} setActivePage={setActivePage} />;
     }
   };
 
   return (
-    <div className="app-container">
-      <main className="main-content">{renderPage()}</main>
+    <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
+      <main className="main-content">
+        {renderPage()}
+      </main>
+      
       <nav className="bottom-nav">
-        {/* Navigation logic */}
+        {[
+          { id: 'dashboard', label: 'الرئيسية' },
+          { id: 'Inventory', label: 'المخزن' },
+          { id: 'PurchasesManager', label: 'المشتريات' },
+          { id: 'Sales', label: 'المبيعات' },
+          { id: 'Reports', label: 'التقارير' }
+        ].map(item => (
+          <button 
+            key={item.id} 
+            className={`nav-item ${activePage === item.id ? 'active' : ''}`} 
+            onClick={() => setActivePage(item.id)}
+          >
+            <span className="nav-label">{item.label}</span>
+          </button>
+        ))}
       </nav>
     </div>
   );
 };
+
+export default App;
