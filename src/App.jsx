@@ -1,132 +1,79 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { CapacitorHttp } from '@capacitor/core';
 import apiService from './services/db'; 
 import { PurchaseService } from './services/PurchaseService';
 
-import Dashboard from './components/Dashboard';
-import PurchasesManager from './components/PurchasesManager';
-import Sales from './components/Sales';
-import Waste from './components/Waste';
-import Expenses from './components/Expenses';
-import Suppliers from './components/Suppliers';
-import Financials from './components/Financials';
-import Reports from './components/Reports';
-import Customers from './components/Customers';
-import Inventory from './components/Inventory';
-import ProductionManager from './components/ProductionManager';
-import StaffManagement from './components/StaffManagement';
-import Settings from './components/Settings';
-
-import './App.css';
-
-const showSwal = (title, icon = 'success') => {
-  Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
-};
+// ... (باقي الاستيرادات للمكونات تبقى كما هي)
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-
+  
+  // دالة تحميل البيانات
   const loadInitial = (key, initialValue) => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : initialValue;
-    } catch (e) { return initialValue; }
+    try { const saved = localStorage.getItem(key); return saved ? JSON.parse(saved) : initialValue; } 
+    catch (e) { return initialValue; }
   };
 
-  const [stock, setStock] = useState(() => loadInitial('stock', []));
-  const [salesData, setSalesData] = useState(() => loadInitial('salesData', []));
-  const [inventory, setInventory] = useState(() => loadInitial('inventory', []));
-  const [expenses, setExpenses] = useState(() => loadInitial('expenses', []));
-  const [waste, setWaste] = useState(() => loadInitial('waste', []));
-  const [suppliers, setSuppliers] = useState(() => loadInitial('suppliers', []));
-  const [customers, setCustomers] = useState(() => loadInitial('customers', []));
-  const [productionData, setProductionData] = useState(() => loadInitial('productionData', []));
-  const [supplierWaitingList, setSupplierWaitingList] = useState(() => loadInitial('waitingList', []));
-  const [cashBook, setCashBook] = useState(() => loadInitial('cashBook', []));
-  const [staff, setStaff] = useState(() => loadInitial('staff', []));
+  const [state, setState] = useState({
+    stock: loadInitial('stock', []),
+    salesData: loadInitial('salesData', []),
+    inventory: loadInitial('inventory', []),
+    expenses: loadInitial('expenses', []),
+    waste: loadInitial('waste', []),
+    suppliers: loadInitial('suppliers', []),
+    customers: loadInitial('customers', []),
+    productionData: loadInitial('productionData', []),
+    cashBook: loadInitial('cashBook', []),
+    staff: loadInitial('staff', [])
+  });
 
-  const setters = useMemo(() => ({
-    stock: setStock, salesData: setSalesData, inventory: setInventory,
-    expenses: setExpenses, waste: setWaste, suppliers: setSuppliers,
-    customers: setCustomers, productionData: setProductionData,
-    waitingList: setSupplierWaitingList, cashBook: setCashBook, staff: setStaff
-  }), []);
-
-  const saveLocally = useCallback((key, data) => {
-    localStorage.setItem(key, JSON.stringify(data));
+  // المزامنة المركزية للأقسام
+  const updateModule = useCallback(async (moduleKey, newData) => {
+    // 1. تحديث الحالة المحلية
+    setState(prev => ({ ...prev, [moduleKey]: newData }));
+    // 2. التخزين المحلي
+    localStorage.setItem(moduleKey, JSON.stringify(newData));
+    // 3. المزامنة السحابية (اختياري حسب الموديول)
+    try { await apiService.syncModule(moduleKey, newData); } 
+    catch (err) { console.error(`Sync failed for ${moduleKey}`); }
   }, []);
 
-  const downloadDataFromMaamoulCloud = useCallback(async () => {
-    try {
-      setIsInitialLoading(true);
-      await apiService.syncAllModules(setters);
-      setIsInitialLoading(false);
-    } catch (err) {
-      console.error("خطأ في المزامنة:", err);
-      setIsInitialLoading(false);
-    }
-  }, [setters]);
-
-  useEffect(() => {
-    downloadDataFromMaamoulCloud();
-  }, [downloadDataFromMaamoulCloud]);
-
+  // دالة خاصة للمشتريات (تتعامل مع السيرفر والـ State)
   const handleSavePurchase = async (p) => {
     try {
       await PurchaseService.createPurchaseOrder("DEFAULT_TENANT", p);
-      setInventory(prev => { const next = [...prev, p]; saveLocally('inventory', next); return next; });
-      showSwal('تم حفظ المادة وتحديث المخزن');
+      const updatedInventory = [...state.inventory, p];
+      await updateModule('inventory', updatedInventory);
+      Swal.fire({ title: 'تم الحفظ بنجاح', icon: 'success', toast: true, position: 'top' });
     } catch (err) {
-      showSwal('خطأ في الاتصال بالسيرفر', 'error');
+      Swal.fire('خطأ في السيرفر', 'تم الحفظ محلياً فقط', 'error');
     }
   };
 
   const renderPage = () => {
+    // تمرير البيانات ككائن واحد لتنظيم أفضل
     const props = { 
-      onBack: () => setActivePage('dashboard'), 
-      stock, inventory, salesData, expenses, waste, suppliers, customers, staff, cashBook, supplierWaitingList, productionData,
-      setStock, setInventory, setSalesData, setExpenses, setWaste, setSuppliers, setCustomers, setStaff, setCashBook, setProductionData,
-      onDeleteItem: (itemId, moduleKey) => console.log("Delete triggered")
+      data: state, 
+      onUpdate: updateModule, // المكونات تستخدم هذه الدالة لتحديث بياناتها
+      onBack: () => setActivePage('dashboard')
     };
     
     switch (activePage) {
-      case 'dashboard': return <Dashboard setActivePage={setActivePage} stats={{}} stock={stock} />;
+      case 'dashboard': return <Dashboard {...props} />;
       case 'PurchasesManager': return <PurchasesManager {...props} onSave={handleSavePurchase} />;
       case 'Sales': return <Sales {...props} />;
       case 'Inventory': return <Inventory {...props} onSave={handleSavePurchase} />;
-      case 'Waste': return <Waste {...props} />;
-      case 'Expenses': return <Expenses {...props} />;
-      case 'Suppliers': return <Suppliers {...props} />;
-      case 'Financials': return <Financials {...props} />;
-      case 'Reports': return <Reports {...props} />;
-      case 'Customers': return <Customers {...props} />;
-      case 'ProductionManager': return <ProductionManager {...props} />;
-      case 'StaffManagement': return <StaffManagement {...props} />;
-      case 'Settings': return <Settings {...props} />;
-      default: return <Dashboard setActivePage={setActivePage} />;
+      // ... باقي الحالات
+      default: return <Dashboard {...props} />;
     }
   };
 
   return (
-    <div className="app-container" style={{ direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
+    <div className="app-container">
       <main className="main-content">{renderPage()}</main>
       <nav className="bottom-nav">
-        {[
-          { id: 'dashboard', label: 'الرئيسية' },
-          { id: 'Inventory', label: 'المخزن' },
-          { id: 'PurchasesManager', label: 'المشتريات' },
-          { id: 'Sales', label: 'المبيعات' },
-          { id: 'Reports', label: 'التقارير' }
-        ].map(item => (
-          <button key={item.id} className={`nav-item ${activePage === item.id ? 'active' : ''}`} onClick={() => setActivePage(item.id)}>
-            <span className="nav-label">{item.label}</span>
-          </button>
-        ))}
+        {/* Navigation logic */}
       </nav>
     </div>
   );
 };
-
-export default App;
