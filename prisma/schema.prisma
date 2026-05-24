@@ -3,10 +3,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 2. تعريف مصدر البيانات (هذا هو السطر الذي ينقصك)
+// 2. تعريف مصدر البيانات (معدل لاستخدام DATABASE_URL)
 datasource db {
   provider = "postgresql"
-  url      = env("NILEDB_URL") 
+  url      = env("DATABASE_URL") 
 }
 
 // 3. النماذج (الجداول)
