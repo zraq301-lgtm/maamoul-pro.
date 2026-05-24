@@ -1,13 +1,23 @@
+// 1. تعريف المولد
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 2. تعريف مصدر البيانات (هذا هو السطر الذي ينقصك)
+datasource db {
+  provider = "postgresql"
+  url      = env("NILEDB_URL") 
+}
+
+// 3. النماذج (الجداول)
 model Purchase {
   id              String         @id @default(uuid())
   tenant_id       String
-  idempotency_key String         @unique // هام جداً: هذا يمنع التكرار على مستوى قاعدة البيانات
+  idempotency_key String         @unique
   total_amount    Decimal
   status          String
   created_at      DateTime       @default(now())
-  items           PurchaseItem[] // علاقة مع جدول العناصر
-
-  @@index([tenant_id])
+  items           PurchaseItem[]
 }
 
 model PurchaseItem {
