@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Swal from 'sweetalert2';
+import { CapacitorHttp } from '@capacitor/core'; // استيراد CapacitorHttp
 import apiService from './services/db';
 import { PurchaseService } from './services/PurchaseService';
 
@@ -45,24 +46,40 @@ const App = () => {
     staff: loadInitial('staff', [])
   });
 
+  // محرك التحديث الذكي المعتمد على CapacitorHttp
   const updateModule = useCallback(async (moduleKey, newData) => {
     setState(prev => ({ ...prev, [moduleKey]: newData }));
     localStorage.setItem(moduleKey, JSON.stringify(newData));
+    
     try {
+      // الاتصال عبر CapacitorHttp للاندرويد
+      await CapacitorHttp.post({
+        url: 'https://maamoul-pro.vercel.app/api/sync', // استبدل الرابط برابط المزامنة الخاص بك
+        headers: { 'Content-Type': 'application/json' },
+        data: { moduleKey, data: newData }
+      });
+      // الاحتياط: المزامنة التقليدية إذا لزم الأمر
       await apiService.syncModule(moduleKey, newData);
     } catch (err) {
       console.error(`Sync failed for ${moduleKey}`, err);
     }
   }, []);
 
+  // معالج المشتريات الذكي (يستخدم PurchaseService المعتمد على Capacitor)
   const handleSavePurchase = async (p) => {
     try {
-      await PurchaseService.createPurchaseOrder("DEFAULT_TENANT", p);
+      const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : Date.now().toString();
+      
+      // استدعاء الخدمة (التي تستخدم CapacitorHttp داخلياً)
+      await PurchaseService.createPurchaseOrder("DEFAULT_TENANT", p, idempotencyKey);
+      
       const updatedInventory = [...state.inventory, p];
       await updateModule('inventory', updatedInventory);
+      
       Swal.fire({ title: 'تم الحفظ بنجاح', icon: 'success', toast: true, position: 'top' });
     } catch (err) {
-      Swal.fire('خطأ في السيرفر', 'تم الحفظ محلياً فقط', 'error');
+      console.error("Purchase Error:", err);
+      Swal.fire('خطأ في الاتصال', 'تم الحفظ محلياً فقط. تأكد من اتصال الإنترنت.', 'error');
     }
   };
 
@@ -70,7 +87,8 @@ const App = () => {
     const props = {
       data: state,
       onUpdate: updateModule,
-      onBack: () => setActivePage('dashboard')
+      onBack: () => setActivePage('dashboard'),
+      onSavePurchase: handleSavePurchase
     };
 
     switch (activePage) {
@@ -96,24 +114,6 @@ const App = () => {
       <main className="main-content">
         {renderPage()}
       </main>
-      
-      <nav className="bottom-nav">
-        {[
-          { id: 'dashboard', label: 'الرئيسية' },
-          { id: 'Inventory', label: 'المخزن' },
-          { id: 'PurchasesManager', label: 'المشتريات' },
-          { id: 'Sales', label: 'المبيعات' },
-          { id: 'Reports', label: 'التقارير' }
-        ].map(item => (
-          <button 
-            key={item.id} 
-            className={`nav-item ${activePage === item.id ? 'active' : ''}`} 
-            onClick={() => setActivePage(item.id)}
-          >
-            <span className="nav-label">{item.label}</span>
-          </button>
-        ))}
-      </nav>
     </div>
   );
 };
