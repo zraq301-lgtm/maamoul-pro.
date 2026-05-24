@@ -1,15 +1,35 @@
 // /api/purchases/create.js
-import { PurchaseService as ServerService } from '../../services/PurchaseService.js'; 
+
+// المسار الصحيح: نخرج من مجلد api/purchases ثم ندخل إلى مجلد src/services
+import { PurchaseService as ServerService } from '../../src/services/PurchaseService.js'; 
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ message: "Method not allowed" });
+  // التأكد من أن الطلب من نوع POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
   
   try {
     const { tenantId, orderData } = req.body;
-    // السيرفر يقوم هنا بمعالجة الطلب وحفظه في قاعدة البيانات
+    
+    // التحقق من وجود البيانات الأساسية
+    if (!tenantId || !orderData) {
+      return res.status(400).json({ message: "Missing required data" });
+    }
+
+    // استدعاء الخدمة لمعالجة الطلب وحفظه في قاعدة البيانات
     const result = await ServerService.createPurchaseOrder(tenantId, orderData);
-    res.status(200).json({ status: "success", data: result });
+    
+    return res.status(200).json({ 
+      status: "success", 
+      data: result 
+    });
+    
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    // إرجاع الخطأ مع توضيح الرسالة
+    return res.status(500).json({ 
+      status: "error", 
+      message: error.message 
+    });
   }
 }
