@@ -1,41 +1,20 @@
-// prisma/schema.prisma
+model Purchase {
+  id              String         @id @default(uuid())
+  tenant_id       String
+  idempotency_key String         @unique // هام جداً: هذا يمنع التكرار على مستوى قاعدة البيانات
+  total_amount    Decimal
+  status          String
+  created_at      DateTime       @default(now())
+  items           PurchaseItem[] // علاقة مع جدول العناصر
 
-generator client {
-  provider = "prisma-client-js"
+  @@index([tenant_id])
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("NILEDB_URL")
-}
-
-// جدول المصانع (لكل مصنع مساحة خاصة به)
-model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
-
-  // العلاقات
-  products  Product[]
-  orders    Order[]
-}
-
-// جدول المنتجات (الخاص بكل مصنع)
-model Product {
-  id        String   @id @default(uuid())
-  tenantId  String
-  name      String
-  price     Decimal
-  stock     Int
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-}
-
-// جدول الطلبات/الفواتير
-model Order {
-  id        String   @id @default(uuid())
-  tenantId  String
-  total     Decimal
-  status    String
-  createdAt DateTime @default(now())
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+model PurchaseItem {
+  id          String   @id @default(uuid())
+  purchase_id String
+  purchase    Purchase @relation(fields: [purchase_id], references: [id])
+  product_id  String
+  quantity    Int
+  unit_price  Decimal
 }
