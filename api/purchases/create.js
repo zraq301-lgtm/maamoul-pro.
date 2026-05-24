@@ -1,10 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 
-// تهيئة PrismaClient لاستخدام المتغير البيئي NILEDB_URL
+// تهيئة PrismaClient لاستخدام المتغير البيئي DATABASE_URL
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: process.env.NILEDB_URL,
+      url: process.env.DATABASE_URL,
     },
   },
 });
