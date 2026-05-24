@@ -3,23 +3,16 @@ import { Truck, ArrowRight, Save, ShoppingCart, Table, AlertTriangle } from 'luc
 import DataGrid from './DataGrid';
 import Swal from 'sweetalert2';
 
-const PurchasesManager = ({ onBack, data, onUpdate, onSave }) => {
-  // استخراج البيانات من الـ props الموحدة
+const PurchasesManager = ({ onBack, data, onSave }) => {
   const { stock = [], inventory = [], suppliers = [] } = data;
   const [activeView, setActiveView] = useState('menu');
   const [isNewItem, setIsNewItem] = useState(false);
   
   const [formData, setFormData] = useState({
-    item: '', unit: '', quantity: '', price: '',
+    item: '', quantity: '', price: '',
     supplier: '', paymentMethod: 'كاش',
     date: new Date().toISOString().split('T')[0]
   });
-
-  const [orderRequest, setOrderRequest] = useState({ 
-    item: '', currentStock: 0, daysLeft: 0, neededQty: '', supplier: '' 
-  });
-
-  const lowStockItems = stock.filter(s => (s.balance || s.stock) <= 20);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -37,45 +30,23 @@ const PurchasesManager = ({ onBack, data, onUpdate, onSave }) => {
       supplierName: formData.supplier || 'مورد عام',
       paymentMethod: formData.paymentMethod,
       status: 'completed',
-      totalAmount: total,
       item: formData.item,
       quantity: formData.quantity,
       price: formData.price,
-      total: total,
-      items: [{
-        productId: formData.item,
-        name: formData.item,
-        quantity: parseFloat(formData.quantity),
-        unitPrice: parseFloat(formData.price),
-        total: total
-      }]
+      total: total
     };
 
-    // استخدام الدالة onSave الممررة من App.jsx (التي تتعامل مع السيرفر وتحديث المخزون)
+    // تنفيذ الحفظ عبر الدالة القادمة من App.jsx
     await onSave(purchaseOrder);
     
-    setFormData({ item: '', unit: '', quantity: '', price: '', supplier: '', paymentMethod: 'كاش', date: new Date().toISOString().split('T')[0] });
-    setActiveView('menu');
-  };
-
-  const handleSendToSuppliers = (e) => {
-    e.preventDefault();
-    Swal.fire('تم', 'تم إرسال طلب الاحتياج للمورد بنجاح', 'success');
+    // إعادة تعيين النموذج
+    setFormData({ item: '', quantity: '', price: '', supplier: '', paymentMethod: 'كاش', date: new Date().toISOString().split('T')[0] });
     setActiveView('menu');
   };
 
   return (
-    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif", minHeight: '100vh' }}>
+    <div style={{ padding: '15px', direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}>
       
-      {lowStockItems.length > 0 && (
-        <div style={{ background: '#fee2e2', border: '1px solid #ef4444', padding: '10px', borderRadius: '10px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <AlertTriangle color="#ef4444" size={20} />
-          <span style={{ color: '#991b1b', fontSize: '0.85rem', fontWeight: 'bold' }}>
-            تنبيه: {lowStockItems.length} أصناف منخفضة المخزون
-          </span>
-        </div>
-      )}
-
       {activeView === 'menu' && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -84,36 +55,41 @@ const PurchasesManager = ({ onBack, data, onUpdate, onSave }) => {
           </div>
 
           <div style={{ display: 'grid', gap: '12px' }}>
-            <div className="glass-card" onClick={() => setActiveView('entry')} style={{ cursor: 'pointer', borderRight: '8px solid #1e5631', padding: '20px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <Save size={24} color="#1e5631" />
-                <div><h3>فاتورة مشتريات</h3></div>
-              </div>
-            </div>
-
-            <div className="glass-card" onClick={() => setActiveView('orderRequest')} style={{ cursor: 'pointer', borderRight: '8px solid #f59e0b', padding: '20px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <Truck size={24} color="#f59e0b" />
-                <div><h3>طلب احتياج</h3></div>
-              </div>
-            </div>
-
-            <div className="glass-card" onClick={() => setActiveView('grid')} style={{ cursor: 'pointer', borderRight: '8px solid #3b82f6', padding: '20px', background: 'white', borderRadius: '15px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <Table size={24} color="#3b82f6" />
-                <div><h3>سجل المشتريات</h3></div>
-              </div>
-            </div>
+            <button className="glass-card" onClick={() => setActiveView('entry')} style={{ width: '100%', textAlign: 'right', padding: '20px', borderRadius: '15px', border: 'none', background: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <h3>فاتورة مشتريات جديدة</h3>
+            </button>
+            <button className="glass-card" onClick={() => setActiveView('grid')} style={{ width: '100%', textAlign: 'right', padding: '20px', borderRadius: '15px', border: 'none', background: 'white', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+              <h3>سجل المشتريات</h3>
+            </button>
           </div>
-          
-          <button onClick={onBack} style={{ marginTop: '20px', width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #ddd', background: '#f8fafc' }}>
-            العودة للرئيسية
-          </button>
+          <button onClick={onBack} style={{ marginTop: '20px', width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #ddd' }}>العودة</button>
         </>
       )}
 
-      {/* بقية العرض (entry, orderRequest, grid) تظل كما هي بنفس المنطق */}
-      {/* تأكد من إغلاق كافة الأقواس */}
+      {activeView === 'entry' && (
+        <div style={{ background: 'white', padding: '20px', borderRadius: '15px' }}>
+          <h3 onClick={() => setActiveView('menu')} style={{ cursor: 'pointer' }}><ArrowRight /> رجوع</h3>
+          <form onSubmit={handleSave}>
+            <input className="input-field" placeholder="اسم الصنف" value={formData.item} onChange={(e) => setFormData({...formData, item: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
+            <input type="number" className="input-field" placeholder="الكمية" value={formData.quantity} onChange={(e) => setFormData({...formData, quantity: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
+            <input type="number" className="input-field" placeholder="السعر" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
+            
+            <select value={formData.supplier} onChange={(e) => setFormData({...formData, supplier: e.target.value})} style={{ width: '100%', padding: '10px', marginBottom: '10px' }}>
+              <option value="">اختر المورد...</option>
+              {suppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+
+            <button type="submit" style={{ width: '100%', padding: '12px', background: '#1e5631', color: 'white', border: 'none', borderRadius: '10px' }}>حفظ الفاتورة</button>
+          </form>
+        </div>
+      )}
+
+      {activeView === 'grid' && (
+        <div>
+          <h3 onClick={() => setActiveView('menu')} style={{ cursor: 'pointer' }}><ArrowRight /> رجوع</h3>
+          <DataGrid data={inventory} />
+        </div>
+      )}
     </div>
   );
 };
