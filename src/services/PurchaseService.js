@@ -1,55 +1,43 @@
-import { CapacitorHttp } from '@capacitor/core';
+import { PrismaClient } from '@prisma/client';
 
-/**
- * رابط السيرفر المضيف للـ API
- */
-const API_BASE_URL = 'https://maamoul-pro-five.vercel.app';
+const prisma = new PrismaClient();
 
 export const PurchaseService = {
-  
   /**
-   * دالة إنشاء طلب شراء (Purchase Order)
-   * @param {string} tenantId - المعرف الفريد للمصنع
-   * @param {Object} orderData - تفاصيل الطلبية
-   * @param {string} idempotencyKey - مفتاح فريد لمنع تكرار الطلب (مثلاً UUID)
-   * @returns {Promise<Object>} 
+   * إنشاء طلب شراء مع تفاصيله داخل ترانزكشن واحد
    */
   async createPurchaseOrder(tenantId, orderData, idempotencyKey) {
-    const options = {
-      url: `${API_BASE_URL}/api/purchases/create`,
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      data: { 
-        tenantId, 
-        orderData,
-        idempotencyKey // إرسال المفتاح للسيرفر
-      }
-    };
+    return await prisma.$transaction(async (tx) => {
+      
+      // 1. التحقق الذكي: هل تم تنفيذ هذا الطلب من قبل؟
+      const existingOrder = await tx.purchase.findUnique({
+        where: { idempotency_key: idempotencyKey }
+      });
 
-    try {
-      const response = await CapacitorHttp.request(options);
-      
-      // التعامل مع حالة النجاح
-      if (response.status >= 200 && response.status < 300) {
-        return response.data;
-      } 
-      
-      // التعامل مع حالة التكرار (409 Conflict)
-      if (response.status === 409) {
-        throw new Error('DUPLICATE_ORDER');
+      if (existingOrder) {
+        // إذا كان موجوداً، نعتبره مكرراً
+        throw new Error("DUPLICATE_ORDER");
       }
 
-      // حالات الخطأ الأخرى
-      throw new Error(`Server responded with status ${response.status}`);
-      
-    } catch (error) {
-      console.error('فشل في إرسال طلب الشراء:', error);
-      
-      // نقوم بإعادة رمي الخطأ ليتم التعامل معه في الواجهة
-      throw error;
-    }
-  }
+      // 2. إنشاء الطلب الأساسي مع الأصناف المرتبطة به
+      const newPurchase = await tx.purchase.create({
+        data: {
+          tenant_id: tenantId,
+          idempotency_key: idempotencyKey,
+          total_amount: orderData.totalAmount, // تأكد من مطابقة الاسم في الـ frontend
+          status: 'PENDING',
+          // ربط الأصناف (Nested Writes) - ميزة قوية في بريزما
+          items: {
+            create: orderData.items.map((item) => ({
+              product_id: item.productId,
+              quantity: item.quantity,
+              unit_price: item.price,
+            })),
+          },
+        },
+      });
+
+      return newPurchase;
+    });
+  },
 };
