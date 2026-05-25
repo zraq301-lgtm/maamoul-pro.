@@ -1,6 +1,13 @@
-import { PrismaClient } from '@prisma/client';
+import { Nile } from '@theniledev/js';
 
-const prisma = new PrismaClient();
+// إعداد عميل Nile
+// ملاحظة: تأكد من ضبط متغيرات البيئة في Vercel (NILE_DB_NAME, NILE_USER, إلخ)
+const nile = Nile({
+  database: process.env.NILE_DB_NAME,
+  user: process.env.NILE_USER,
+  password: process.env.NILE_PASSWORD,
+  host: process.env.NILE_HOST,
+});
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,28 +21,25 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // التعديل: التأكد من التعامل مع البيانات كنصوص صريحة
-    const tId = String(tenantId);
-    const iKey = String(idempotencyKey);
+    // استخدام Nile لإدارة اتصال Prisma الخاص بالمستأجر المحدد
+    const db = await nile.tenant(tenantId).prisma();
 
-    const result = await prisma.$transaction(async (tx) => {
-      
-      // استخدام tx.purchase بوضوح - Prisma الآن يعرف أنه في public schema
+    // إجراء العملية داخل Transaction
+    const result = await db.$transaction(async (tx) => {
+      // البحث عن سجل مكرر
       const existing = await tx.purchase.findFirst({
-        where: { 
-          idempotency_key: iKey,
-          tenant_id: tId 
-        }
+        where: { idempotency_key: String(idempotencyKey) }
       });
 
       if (existing) {
         throw new Error("DUPLICATE_ORDER");
       }
 
+      // الإنشاء
       return await tx.purchase.create({
         data: {
-          tenant_id: tId,
-          idempotency_key: iKey,
+          tenant_id: String(tenantId),
+          idempotency_key: String(idempotencyKey),
           total_amount: orderData.total || 0,
           status: "pending",
           items: {
@@ -52,7 +56,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: "success", data: result });
 
   } catch (error) {
-    console.error("API Error Details:", error); // تسجيل تفاصيل الخطأ بدقة
+    console.error("API Error:", error);
     
     if (error.message === "DUPLICATE_ORDER") {
       return res.status(409).json({ status: "error", message: "Order already exists" });
