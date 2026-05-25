@@ -1,35 +1,19 @@
-// schema.prisma
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // أضف الـ Schema الخاصة بالمستأجر هنا
+  schemas  = ["public", "019e5c52-d5e3-7b3b-881f-0d561a9dbd91_public"]
 }
 
 model Purchase {
-  id              String         @id @default(uuid())
-  tenant_id       String         // هذا هو مفتاح العزل الأساسي
-  idempotency_key String
-  total_amount    Decimal        @db.Decimal(10, 2)
-  status          String
-  created_at      DateTime       @default(now())
-  items           PurchaseItem[]
-
-  @@unique([tenant_id, idempotency_key])
-  @@index([tenant_id])
-  @@map("purchase")
+  // ... بقية الحقول كما هي
+  
+  // قم بتغيير الـ schema هنا لتكون هي نفسها التي في الخطأ
+  @@schema("019e5c52-d5e3-7b3b-881f-0d561a9dbd91_public")
 }
 
 model PurchaseItem {
-  id          String   @id @default(uuid())
-  purchase_id String
-  purchase    Purchase @relation(fields: [purchase_id], references: [id], onDelete: Cascade)
-  product_id  String
-  quantity    Int
-  unit_price  Decimal  @db.Decimal(10, 2)
-
-  @@index([purchase_id])
-  @@map("purchase_item")
+  // ... بقية الحقول كما هي
+  
+  @@schema("019e5c52-d5e3-7b3b-881f-0d561a9dbd91_public")
 }
