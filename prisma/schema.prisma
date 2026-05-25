@@ -1,3 +1,16 @@
+// ملف schema.prisma الكامل
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public"]
+}
+
 model Purchase {
   id              String         @id @default(uuid())
   tenant_id       String
@@ -7,10 +20,11 @@ model Purchase {
   created_at      DateTime       @default(now())
   items           PurchaseItem[]
 
+  // المفتاح الفريد المركب يضمن عدم تكرار الـ idempotency_key لنفس المستأجر
   @@unique([tenant_id, idempotency_key])
   @@index([tenant_id])
   @@map("purchase")
-  @@schema("public") // أضف هذا السطر ليوجه Prisma للبحث في الـ public schema
+  @@schema("public")
 }
 
 model PurchaseItem {
@@ -23,5 +37,5 @@ model PurchaseItem {
 
   @@index([purchase_id])
   @@map("purchase_item")
-  @@schema("public") // وأضف هذا السطر هنا أيضاً
+  @@schema("public")
 }
