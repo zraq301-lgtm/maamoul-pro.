@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client';
 
-// Singleton instance
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
@@ -15,23 +14,23 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // نستخدم المعاملات لضمان سلامة البيانات
+    // لا حاجة لـ SET nile.tenant_id
+    // سنقوم بالفلترة يدوياً في كل استعلام لضمان أمان البيانات
+    
     const result = await prisma.$transaction(async (tx) => {
-      
-      // الضبط الصحيح للـ Tenant مع التأكد من أن الأمر ليس فارغاً
-      // ملاحظة: نستخدم template string مباشر للتأكد من إرسال النص لقاعدة البيانات
-      await tx.$executeRawUnsafe(`SET nile.tenant_id = '${tenantId}'::uuid`);
-
-      // البحث عن السجل
-      const existing = await tx.purchase.findUnique({
-        where: { idempotency_key: idempotencyKey }
+      // البحث مع فلترة يدوية للـ tenant_id
+      const existing = await tx.purchase.findFirst({
+        where: { 
+          idempotency_key: idempotencyKey,
+          tenant_id: tenantId // الفلترة اليدوية هنا هي الأمان الحقيقي
+        }
       });
 
       if (existing) {
         throw new Error("DUPLICATE_ORDER");
       }
 
-      // إنشاء السجل
+      // الإنشاء
       return await tx.purchase.create({
         data: {
           tenant_id: tenantId,
@@ -49,14 +48,9 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("API Error:", error);
-
     if (error.message === "DUPLICATE_ORDER") {
       return res.status(409).json({ status: "error", message: "Order already exists" });
     }
-    
-    return res.status(500).json({ 
-      status: "error", 
-      message: error.message || "Internal Server Error" 
-    });
+    return res.status(500).json({ status: "error", message: error.message });
   }
 }
