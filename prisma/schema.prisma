@@ -3,28 +3,34 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 2. تعريف مصدر البيانات (يعتمد على متغير البيئة DATABASE_URL الممرر من Vercel)
+// 2. تعريف مصدر البيانات (ضبط إضافي لبيئة الاستضافة)
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = null 
 }
 
 // 3. النماذج (الجداول)
+// لاحظ أننا نستخدم معيار Nile في الـ Tenant-aware tables
 model Purchase {
   id              String         @id @default(uuid())
-  tenant_id       String
+  tenant_id       String         // ضروري جداً لتقسيم البيانات في Nile
   idempotency_key String         @unique
   total_amount    Decimal
   status          String
   created_at      DateTime       @default(now())
   items           PurchaseItem[]
+
+  @@index([tenant_id]) // تحسين الأداء عند البحث عن بيانات مستأجر معين
 }
 
 model PurchaseItem {
   id          String   @id @default(uuid())
   purchase_id String
-  purchase    Purchase @relation(fields: [purchase_id], references: [id])
+  purchase    Purchase @relation(fields: [purchase_id], references: [id], onDelete: Cascade)
   product_id  String
   quantity    Int
   unit_price  Decimal
+
+  @@index([purchase_id]) // تحسين الأداء للعلاقات
 }
