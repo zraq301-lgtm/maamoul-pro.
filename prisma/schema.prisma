@@ -11,14 +11,16 @@ datasource db {
 model Purchase {
   id              String         @id @default(uuid())
   tenant_id       String
-  idempotency_key String         @unique
+  idempotency_key String
   total_amount    Decimal        @db.Decimal(10, 2)
   status          String
   created_at      DateTime       @default(now())
   items           PurchaseItem[]
 
+  // التعديل: إزالة @unique من الحقل الفردي وجعله مركباً
+  @@unique([tenant_id, idempotency_key]) 
   @@index([tenant_id])
-  @@map("purchase") // هذا يربط الموديل بالجدول الموجود فعلياً في Nile
+  @@map("purchase")
 }
 
 model PurchaseItem {
@@ -30,5 +32,5 @@ model PurchaseItem {
   unit_price  Decimal  @db.Decimal(10, 2)
 
   @@index([purchase_id])
-  @@map("purchase_item") // يربط الموديل بالجدول الموجود فعلياً
+  @@map("purchase_item")
 }
