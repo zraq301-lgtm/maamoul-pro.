@@ -1,4 +1,7 @@
-import { prisma } from '../../lib/nile'; 
+import { PrismaClient } from '@prisma/client';
+
+// تعريف العميل داخل الملف نفسه لضمان استقرار الكود على Vercel
+const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -12,8 +15,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
+    // التنفيذ باستخدام Transaction
     const result = await prisma.$transaction(async (tx) => {
-      // البحث عن الطلب الحالي بناءً على العميل (العزل)
+      
+      // البحث عن الطلب الحالي
       const existing = await tx.purchase.findFirst({
         where: { 
           tenant_id: String(tenantId),
