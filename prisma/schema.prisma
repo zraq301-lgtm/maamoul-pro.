@@ -9,7 +9,7 @@ datasource db {
 
 model Purchase {
   id              String         @id @default(uuid())
-  tenant_id       String
+  tenant_id       String         // حقل العزل الأساسي
   idempotency_key String
   total_amount    Decimal        @db.Decimal(10, 2)
   status          String
