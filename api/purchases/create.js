@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-// إعداد الـ Prisma Client (يفضل جعله Singleton لتجنب فتح اتصالات كثيرة)
+// Singleton instance
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
@@ -15,13 +15,14 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // لضمان عمل Nile بشكل صحيح، يجب أن نمرر الـ tenantId في الاستعلامات
+    // نستخدم المعاملات لضمان سلامة البيانات
     const result = await prisma.$transaction(async (tx) => {
       
-      // 1. تحديد الـ Tenant في Nile (هذا الجزء هو سر عمل قاعدة البيانات)
-      await tx.$executeRaw`SET nile.tenant_id = ${tenantId}::uuid`;
+      // الضبط الصحيح للـ Tenant مع التأكد من أن الأمر ليس فارغاً
+      // ملاحظة: نستخدم template string مباشر للتأكد من إرسال النص لقاعدة البيانات
+      await tx.$executeRawUnsafe(`SET nile.tenant_id = '${tenantId}'::uuid`);
 
-      // 2. البحث عن وجود مسبق (يتم البحث داخل نطاق الـ Tenant الحالي فقط)
+      // البحث عن السجل
       const existing = await tx.purchase.findUnique({
         where: { idempotency_key: idempotencyKey }
       });
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
         throw new Error("DUPLICATE_ORDER");
       }
 
-      // 3. إنشاء السجل
+      // إنشاء السجل
       return await tx.purchase.create({
         data: {
           tenant_id: tenantId,
@@ -53,6 +54,9 @@ export default async function handler(req, res) {
       return res.status(409).json({ status: "error", message: "Order already exists" });
     }
     
-    return res.status(500).json({ status: "error", message: error.message });
+    return res.status(500).json({ 
+      status: "error", 
+      message: error.message || "Internal Server Error" 
+    });
   }
 }
