@@ -3,25 +3,24 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// 2. تعريف مصدر البيانات (ضبط إضافي لبيئة الاستضافة)
+// 2. تعريف مصدر البيانات (ضبط للاتصال بقاعدة بيانات Nile)
 datasource db {
-  provider          = "postgresql"
-  url               = env("DATABASE_URL")
-  shadowDatabaseUrl = null 
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // 3. النماذج (الجداول)
-// لاحظ أننا نستخدم معيار Nile في الـ Tenant-aware tables
+// تم تصميمها لتتوافق مع معيار Nile الخاص بـ Multi-tenancy
 model Purchase {
   id              String         @id @default(uuid())
-  tenant_id       String         // ضروري جداً لتقسيم البيانات في Nile
+  tenant_id       String         // حقل إلزامي لتقسيم البيانات في Nile
   idempotency_key String         @unique
   total_amount    Decimal
   status          String
   created_at      DateTime       @default(now())
   items           PurchaseItem[]
 
-  @@index([tenant_id]) // تحسين الأداء عند البحث عن بيانات مستأجر معين
+  @@index([tenant_id]) // فهرس لتحسين سرعة الاستعلامات لكل مستأجر
 }
 
 model PurchaseItem {
@@ -32,5 +31,5 @@ model PurchaseItem {
   quantity    Int
   unit_price  Decimal
 
-  @@index([purchase_id]) // تحسين الأداء للعلاقات
+  @@index([purchase_id]) // فهرس لتسريع العلاقة بين الفاتورة ومحتوياتها
 }
