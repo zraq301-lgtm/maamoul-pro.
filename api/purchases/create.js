@@ -14,15 +14,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // لا حاجة لـ SET nile.tenant_id
-    // سنقوم بالفلترة يدوياً في كل استعلام لضمان أمان البيانات
-    
+    // التعديل: التأكد من التعامل مع البيانات كنصوص صريحة
+    const tId = String(tenantId);
+    const iKey = String(idempotencyKey);
+
     const result = await prisma.$transaction(async (tx) => {
-      // البحث مع فلترة يدوية للـ tenant_id
+      
+      // استخدام tx.purchase بوضوح - Prisma الآن يعرف أنه في public schema
       const existing = await tx.purchase.findFirst({
         where: { 
-          idempotency_key: idempotencyKey,
-          tenant_id: tenantId // الفلترة اليدوية هنا هي الأمان الحقيقي
+          idempotency_key: iKey,
+          tenant_id: tId 
         }
       });
 
@@ -30,15 +32,18 @@ export default async function handler(req, res) {
         throw new Error("DUPLICATE_ORDER");
       }
 
-      // الإنشاء
       return await tx.purchase.create({
         data: {
-          tenant_id: tenantId,
-          idempotency_key: idempotencyKey,
+          tenant_id: tId,
+          idempotency_key: iKey,
           total_amount: orderData.total || 0,
           status: "pending",
           items: {
-            create: orderData.items || []
+            create: (orderData.items || []).map(item => ({
+              product_id: String(item.product_id),
+              quantity: parseInt(item.quantity),
+              unit_price: parseFloat(item.unit_price)
+            }))
           }
         }
       });
@@ -47,10 +52,15 @@ export default async function handler(req, res) {
     return res.status(200).json({ status: "success", data: result });
 
   } catch (error) {
-    console.error("API Error:", error);
+    console.error("API Error Details:", error); // تسجيل تفاصيل الخطأ بدقة
+    
     if (error.message === "DUPLICATE_ORDER") {
       return res.status(409).json({ status: "error", message: "Order already exists" });
     }
-    return res.status(500).json({ status: "error", message: error.message });
+    
+    return res.status(500).json({ 
+      status: "error", 
+      message: error.message 
+    });
   }
 }
