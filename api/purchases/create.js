@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/nile'; // استيراد المحرك الموحد
+import { prisma } from '../../lib/nile'; 
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -12,9 +12,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // التنفيذ باستخدام Transaction عبر المحرك الموحد
     const result = await prisma.$transaction(async (tx) => {
-      
+      // البحث عن الطلب الحالي بناءً على العميل (العزل)
       const existing = await tx.purchase.findFirst({
         where: { 
           tenant_id: String(tenantId),
@@ -24,6 +23,7 @@ export default async function handler(req, res) {
 
       if (existing) throw new Error("DUPLICATE_ORDER");
 
+      // إنشاء الطلب
       return await tx.purchase.create({
         data: {
           tenant_id: String(tenantId),
