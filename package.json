@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npx prisma db push --accept-data-loss && vite build --outDir dist",
+    "build": "npx prisma generate && vite build --outDir dist",
     "preview": "vite preview",
     "static-build": "vite build --outDir www",
     "sync": "npx cap sync",
