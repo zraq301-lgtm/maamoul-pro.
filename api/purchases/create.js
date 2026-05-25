@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../../lib/nile'; // استيراد المحرك الموحد
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -8,17 +6,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    // استخراج tenantId مباشرة من الـ body
     const { tenantId, orderData, idempotencyKey } = req.body;
 
     if (!tenantId || !orderData || !idempotencyKey) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // التنفيذ باستخدام Transaction لضمان العزل والسرعة
+    // التنفيذ باستخدام Transaction عبر المحرك الموحد
     const result = await prisma.$transaction(async (tx) => {
       
-      // التحقق من التكرار باستخدام tenantId (معامل العزل)
       const existing = await tx.purchase.findFirst({
         where: { 
           tenant_id: String(tenantId),
@@ -28,7 +24,6 @@ export default async function handler(req, res) {
 
       if (existing) throw new Error("DUPLICATE_ORDER");
 
-      // إنشاء الطلب وعناصره
       return await tx.purchase.create({
         data: {
           tenant_id: String(tenantId),
