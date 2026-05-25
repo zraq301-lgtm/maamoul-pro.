@@ -1,16 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 
-// تهيئة PrismaClient لاستخدام المتغير البيئي DATABASE_URL
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
-});
+// إعداد الـ Prisma Client (يفضل جعله Singleton لتجنب فتح اتصالات كثيرة)
+const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
-  // 1. السماح فقط بطريقة POST
   if (req.method !== 'POST') {
     return res.status(405).json({ message: "Method not allowed" });
   }
@@ -18,14 +11,17 @@ export default async function handler(req, res) {
   try {
     const { tenantId, orderData, idempotencyKey } = req.body;
 
-    // 2. التحقق من البيانات المطلوبة
     if (!tenantId || !orderData || !idempotencyKey) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // 3. تنفيذ العملية باستخدام Transaction لضمان السلامة
+    // لضمان عمل Nile بشكل صحيح، يجب أن نمرر الـ tenantId في الاستعلامات
     const result = await prisma.$transaction(async (tx) => {
-      // البحث عن وجود مسبق لمنع التكرار
+      
+      // 1. تحديد الـ Tenant في Nile (هذا الجزء هو سر عمل قاعدة البيانات)
+      await tx.$executeRaw`SET nile.tenant_id = ${tenantId}::uuid`;
+
+      // 2. البحث عن وجود مسبق (يتم البحث داخل نطاق الـ Tenant الحالي فقط)
       const existing = await tx.purchase.findUnique({
         where: { idempotency_key: idempotencyKey }
       });
@@ -34,7 +30,7 @@ export default async function handler(req, res) {
         throw new Error("DUPLICATE_ORDER");
       }
 
-      // إنشاء السجل الجديد
+      // 3. إنشاء السجل
       return await tx.purchase.create({
         data: {
           tenant_id: tenantId,
@@ -53,7 +49,6 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("API Error:", error);
 
-    // 4. معالجة الأخطاء
     if (error.message === "DUPLICATE_ORDER") {
       return res.status(409).json({ status: "error", message: "Order already exists" });
     }
