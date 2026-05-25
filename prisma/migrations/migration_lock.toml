@@ -1,0 +1,2 @@
+provider = "postgresql"
+last_migration = "20260525000000_init"
