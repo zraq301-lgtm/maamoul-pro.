@@ -1,26 +1,24 @@
-// 1. تعريف المولد
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
-// 2. تعريف مصدر البيانات (ضبط للاتصال بقاعدة بيانات Nile)
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// 3. النماذج (الجداول)
-// تم تصميمها لتتوافق مع معيار Nile الخاص بـ Multi-tenancy
 model Purchase {
   id              String         @id @default(uuid())
-  tenant_id       String         // حقل إلزامي لتقسيم البيانات في Nile
+  tenant_id       String
   idempotency_key String         @unique
-  total_amount    Decimal
+  total_amount    Decimal        @db.Decimal(10, 2)
   status          String
   created_at      DateTime       @default(now())
   items           PurchaseItem[]
 
-  @@index([tenant_id]) // فهرس لتحسين سرعة الاستعلامات لكل مستأجر
+  @@index([tenant_id])
+  @@map("purchase") // هذا يربط الموديل بالجدول الموجود فعلياً في Nile
 }
 
 model PurchaseItem {
@@ -29,7 +27,8 @@ model PurchaseItem {
   purchase    Purchase @relation(fields: [purchase_id], references: [id], onDelete: Cascade)
   product_id  String
   quantity    Int
-  unit_price  Decimal
+  unit_price  Decimal  @db.Decimal(10, 2)
 
-  @@index([purchase_id]) // فهرس لتسريع العلاقة بين الفاتورة ومحتوياتها
+  @@index([purchase_id])
+  @@map("purchase_item") // يربط الموديل بالجدول الموجود فعلياً
 }
