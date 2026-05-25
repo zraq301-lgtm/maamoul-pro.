@@ -1,46 +1,38 @@
 import { PrismaClient } from '@prisma/client';
 
-// تعريف العميل خارج الـ handler لضمان إعادة استخدامه (Connection Pooling)
 const prisma = new PrismaClient();
 
 export default async function handler(req, res) {
-  // التحقق من طريقة الطلب
   if (req.method !== 'POST') {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
   try {
+    // استخراج tenantId مباشرة من الـ body
     const { tenantId, orderData, idempotencyKey } = req.body;
 
-    // التحقق من البيانات الأساسية
     if (!tenantId || !orderData || !idempotencyKey) {
       return res.status(400).json({ message: "Missing required data" });
     }
 
-    // تجهيز البيانات
-    const tId = String(tenantId);
-    const iKey = String(idempotencyKey);
-
-    // استخدام Transaction لضمان سلامة البيانات
+    // التنفيذ باستخدام Transaction لضمان العزل والسرعة
     const result = await prisma.$transaction(async (tx) => {
       
-      // 1. البحث باستخدام tenant_id لضمان عزل البيانات (Multi-tenancy isolation)
+      // التحقق من التكرار باستخدام tenantId (معامل العزل)
       const existing = await tx.purchase.findFirst({
         where: { 
-          tenant_id: tId,
-          idempotency_key: iKey 
+          tenant_id: String(tenantId),
+          idempotency_key: String(idempotencyKey) 
         }
       });
 
-      if (existing) {
-        throw new Error("DUPLICATE_ORDER");
-      }
+      if (existing) throw new Error("DUPLICATE_ORDER");
 
-      // 2. إنشاء الطلب مع ربطه بالمستأجر
+      // إنشاء الطلب وعناصره
       return await tx.purchase.create({
         data: {
-          tenant_id: tId,
-          idempotency_key: iKey,
+          tenant_id: String(tenantId),
+          idempotency_key: String(idempotencyKey),
           total_amount: orderData.total || 0,
           status: "pending",
           items: {
@@ -59,14 +51,13 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("API Error Details:", error);
     
-    // معالجة الأخطاء المحددة
     if (error.message === "DUPLICATE_ORDER") {
       return res.status(409).json({ status: "error", message: "Order already exists" });
     }
     
     return res.status(500).json({ 
       status: "error", 
-      message: error.message || "Internal Server Error" 
+      message: error.message 
     });
   }
 }
