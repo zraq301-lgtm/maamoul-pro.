@@ -20,12 +20,14 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      # هذا الخطوة هي الأهم: استخدام migrate deploy بدلاً من db push
-      # تأكد من وجود ملفات الـ migrations في مجلد prisma/migrations
       - name: Run Prisma Migrate
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }} # <--- أضف هذا السطر ضروري
 
       - name: Build Project
         run: npm run build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
