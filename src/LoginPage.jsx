@@ -1,11 +1,14 @@
 'use client'
 import { useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+// تم تعديل المسار ليكون نسبياً ومحدداً بالامتداد لضمان تعريفه أثناء البناء
+import { createClient } from './utils/supabase/client.js'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  
+  // إنشاء عميل Supabase
   const supabase = createClient()
 
   const handleLogin = async () => {
