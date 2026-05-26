@@ -1,4 +1,3 @@
-'use client'
 import { useState } from 'react'
 // تم تعديل المسار ليكون نسبياً ومحدداً بالامتداد لضمان تعريفه أثناء البناء
 import { createClient } from './utils/supabase/client.js'
