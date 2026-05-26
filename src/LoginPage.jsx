@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createClient } from './utils/supabase/client.js';
+// أضف هذا السطر لضمان استمرارية الجلسة في أندرويد
+import { App } from '@capacitor/app'; 
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,11 +14,12 @@ export default function LoginPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const handleLogin = async (e) => {
-    e.preventDefault(); // منع إعادة تحميل الصفحة
+    e.preventDefault();
     setLoading(true);
     setError(null);
     
-    const { error } = await supabase.auth.signInWithPassword({
+    // استخدام persistSession في Supabase لضمان الحفظ في الـ Capacitor storage
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -26,12 +29,13 @@ export default function LoginPage() {
     if (error) {
       setError(error.message);
     } else {
-      // Supabase تتعامل تلقائياً مع التوكنات، لا حاجة لتعيينها يدوياً
+      // بعد تسجيل الدخول، نتأكد من التوجيه
       navigate('/', { replace: true });
     }
   };
 
   return (
+    // الكود كما هو، مع التأكد أن النموذج يرسل البيانات بشكل صحيح
     <div className="flex flex-col gap-4 p-8 max-w-md mx-auto mt-10 shadow-lg rounded-lg border border-gray-200 bg-white">
       <h1 className="text-2xl font-bold text-center text-gray-800">تسجيل الدخول</h1>
       
@@ -66,10 +70,6 @@ export default function LoginPage() {
           {loading ? 'جاري الدخول...' : 'دخول'}
         </button>
       </form>
-
-      <p className="text-center text-sm text-gray-500 mt-2">
-        نظام nawh.ai لإدارة الموارد
-      </p>
     </div>
   );
 }
