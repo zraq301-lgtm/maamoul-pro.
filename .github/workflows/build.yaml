@@ -1,4 +1,4 @@
-        name: "Nawh Final Recovery Build"
+name: "Nawh Final Recovery Build"
 
 on:
   push:
@@ -33,13 +33,13 @@ jobs:
         run: |
           npm install --legacy-peer-deps
           npm run build
-          # لا نحتاج لنسخ dist إلى www يدوياً إذا كان Capacitor مضبوطاً للعمل مع dist
+          # نتأكد من أن المجلد موجود وجاهز
+          mkdir -p www
+          cp -r dist/* www/ || echo "Using existing files"
 
-      - name: 5. Sync Capacitor
+      - name: 5. Force Create Android Project
         run: |
-          # حذف المجلد القديم لضمان نظافة البناء
           rm -rf android
-          # إضافة المنصة والمزامنة بعد اكتمال بناء الويب
           npx cap add android
           npx cap sync android
 
@@ -48,7 +48,6 @@ jobs:
           mkdir -p android/app/
           echo '{"project_info": {"project_number": "162488255991", "project_id": "nawh-app"}, "client": [{"client_info": {"mobilesdk_app_id": "1:162488255991:android:73d6299f11a1b7aec61af2", "android_client_info": {"package_name": "com.nawh.app"}}, "api_key": [{"current_key": "AIzaSyAKjsgnoHnGGr3urhm6Kpu7RvxN2dp6sJQ"}], "services": {"appinvite_service": {"other_platform_oauth_client": []}}}]}' > android/app/google-services.json
           
-          # ضبط المعرفات
           sed -i 's/namespace ".*"/namespace "com.nawh.app"/' android/app/build.gradle
           sed -i 's/applicationId ".*"/applicationId "com.nawh.app"/' android/app/build.gradle
           
@@ -61,26 +60,23 @@ jobs:
         run: |
           npm install @capacitor/assets --save-dev
           mkdir -p assets
-          cp resources/icon-foreground.png assets/icon.png || echo "No icon found"
+          cp resources/icon-foreground.png assets/icon.png || echo "Icon not found"
           npx capacitor-assets generate --android
 
       - name: 7. Native Android Compilation
         working-directory: ./android
         run: |
           chmod +x gradlew
-          # تنظيف الـ Gradle قبل البناء
           ./gradlew clean
-          # إصلاح تعارض مكتبة bcprov
           echo "configurations.all { resolutionStrategy.eachDependency { details -> if (details.requested.name == 'bcprov-jdk18on') { details.useVersion '1.78.1' } } }" >> build.gradle
-          # البناء
           ./gradlew assembleRelease bundleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m"
 
       - name: 8. Sign APK & AAB
         run: |
           keytool -genkey -v -keystore nawh.jks -alias nawh_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass "nawh_pass_2026" -keypass "nawh_pass_2026" -dname "CN=NawhApp, O=Nawh, C=EG" -noprompt
           
-          APK_PATH=$(find android/app/build/outputs/apk/release/ -name "app-release-unsigned.apk" | head -n 1)
-          AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "app-release.aab" | head -n 1)
+          APK_PATH=$(find android/app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+          AAB_PATH=$(find android/app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
           BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools | tail -n 1)
           
           $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign --ks nawh.jks --ks-pass pass:"nawh_pass_2026" --out Nawh-Final.apk "$APK_PATH"
