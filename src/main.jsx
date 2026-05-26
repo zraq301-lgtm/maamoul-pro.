@@ -6,18 +6,31 @@ import LoginPage from "./LoginPage.jsx";
 import "./index.css";
 import "./App.css";
 
-// دالة بسيطة للتأكد من حالة تسجيل الدخول (يمكنك تطويرها لاحقاً)
+// مكوّن حماية المسارات
 const ProtectedRoute = ({ children }) => {
-  // هنا ستتحقق من Supabase إذا كان المستخدم مسجلاً
-  const isAuthenticated = localStorage.getItem("sb-access-token"); // مثال بسيط
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  // التحقق من حالة تسجيل الدخول
+  const isAuthenticated = localStorage.getItem("sb-access-token");
+  
+  if (!isAuthenticated) {
+    // إذا لم يكن مسجلاً، نرسله لصفحة الدخول
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
 };
 
-ReactDOM.createRoot(document.getElementById("root")).render(
+// استخدام createRoot بشكل سليم
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("لم يتم العثور على عنصر root في ملف index.html");
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
+        {/* مسار تسجيل الدخول */}
         <Route path="/login" element={<LoginPage />} />
+        
+        {/* المسارات المحمية */}
         <Route 
           path="/*" 
           element={
@@ -26,6 +39,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             </ProtectedRoute>
           } 
         />
+        
+        {/* إعادة توجيه أي مسار غير موجود للرئيسية */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
