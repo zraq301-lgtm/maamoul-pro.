@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-// تم التأكد من المسار الصحيح للملف
+import { useNavigate } from 'react-router-dom' // استيراد Navigate
 import { createClient } from './utils/supabase/client.js'
 
 export default function LoginPage() {
@@ -7,14 +7,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   
-  // استخدام useMemo يضمن إنشاء نسخة واحدة فقط من العميل عند تحميل المكوّن
-  // وهذا يمنع التكرار غير الضروري الذي قد يسبب أخطاء في الرندرة
+  const navigate = useNavigate() // تهيئة المتغير
+  
   const supabase = useMemo(() => createClient(), [])
 
   const handleLogin = async () => {
     setLoading(true)
     
-    // عملية تسجيل الدخول عبر Supabase
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -25,13 +24,12 @@ export default function LoginPage() {
     if (error) {
       alert('خطأ: ' + error.message)
     } else {
-      // حفظ حالة تسجيل الدخول محلياً
       localStorage.setItem("sb-access-token", "true")
       
       alert('تم تسجيل الدخول بنجاح!')
       
-      // العودة للصفحة الرئيسية مع إعادة تحميل المسار برمجياً
-      window.location.href = '/'
+      // الانتقال المباشر للمسار الرئيسي بدون إعادة تحميل المتصفح
+      navigate('/', { replace: true })
     }
   }
 
