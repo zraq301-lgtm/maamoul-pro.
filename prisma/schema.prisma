@@ -1,62 +1,30 @@
-// 1. إعداد الاتصال (كما طلبت)
+// 1. الإعدادات الأساسية للتعامل مع Prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 2. إعداد الاتصال بقاعدة البيانات (يقرأ القيم من Vercel Environment Variables)
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
+// 3. جدول الشركات (نظام الـ ERP الأساسي)
+model Company {
+  id        String   @id @default(uuid()) // مفتاح أساسي فريد لكل شركة
+  name      String   // اسم الشركة
+  createdAt DateTime @default(now()) // تاريخ إنشاء الشركة
+  users     User[]   // علاقة: الشركة الواحدة لها عدة مستخدمين
 }
 
-// 2. جدول الشركات (العملاء) - مركز النظام
-model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
-  
-  // العلاقات
-  users     User[]
-  warehouses Warehouse[]
-  products   Product[]
-  invoices   Invoice[]
-}
-
-// 3. جدول المستخدمين (مرتبط بـ Tenant)
+// 4. جدول المستخدمين
 model User {
-  id        String   @id // سيحمل نفس ID المستخدم من Supabase Auth
-  email     String   @unique
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-}
-
-// 4. جدول المخازن (مثال على جدول يحتاج عزل)
-model Warehouse {
-  id        String   @id @default(uuid())
-  name      String
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  id        String   @id @default(uuid()) // مفتاح أساسي فريد للمستخدم
+  email     String   @unique // البريد الإلكتروني (يجب أن يكون فريداً)
+  password  String   // كلمة السر (تذكر تشفيرها قبل الحفظ)
+  companyId String?  // الحقل الذي يربط المستخدم بالشركة
   
-  @@index([tenantId]) // تحسين الأداء عند البحث بناءً على العميل
-}
-
-// 5. جدول المنتجات
-model Product {
-  id        String   @id @default(uuid())
-  name      String
-  price     Decimal
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  
-  @@index([tenantId])
-}
-
-// 6. جدول الفواتير
-model Invoice {
-  id        String   @id @default(uuid())
-  total     Decimal
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  
-  @@index([tenantId])
+  // ربط المستخدم بالشركة
+  company   Company? @relation(fields: [companyId], references: [id])
 }
