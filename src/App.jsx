@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Swal from 'sweetalert2';
-import { CapacitorHttp } from '@capacitor/core'; // استيراد CapacitorHttp
+import { CapacitorHttp } from '@capacitor/core';
+import { createClient } from './utils/supabase/client.js'; // استيراد Supabase للتحكم في الخروج
 import apiService from './services/db';
 import { PurchaseService } from './services/PurchaseService';
 
@@ -23,6 +24,7 @@ import './App.css';
 
 const App = () => {
   const [activePage, setActivePage] = useState('dashboard');
+  const supabase = createClient(); // تهيئة Supabase لاستخدامه في الخروج
 
   const loadInitial = (key, initialValue) => {
     try {
@@ -54,7 +56,7 @@ const App = () => {
     try {
       // الاتصال عبر CapacitorHttp للاندرويد
       await CapacitorHttp.post({
-        url: 'https://maamoul-pro.vercel.app/api/sync', // استبدل الرابط برابط المزامنة الخاص بك
+        url: 'https://maamoul-pro.vercel.app/api/sync', 
         headers: { 'Content-Type': 'application/json' },
         data: { moduleKey, data: newData }
       });
@@ -83,12 +85,19 @@ const App = () => {
     }
   };
 
+  // وظيفة تسجيل الخروج
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login'; // إعادة توجيه المستخدم لصفحة الدخول
+  };
+
   const renderPage = () => {
     const props = {
       data: state,
       onUpdate: updateModule,
       onBack: () => setActivePage('dashboard'),
-      onSavePurchase: handleSavePurchase
+      onSavePurchase: handleSavePurchase,
+      onLogout: handleLogout // تمرير وظيفة الخروج للمكونات إذا احتجتها
     };
 
     switch (activePage) {
