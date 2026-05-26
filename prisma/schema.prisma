@@ -1,30 +1,18 @@
-// 1. الإعدادات الأساسية للتعامل مع Prisma
-generator client {
-  provider = "prisma-client-js"
+model Purchase {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  idempotency_key String   @unique // <--- مهم جداً ليعمل كود الـ API الخاص بك
+  total_amount    Float
+  status          String
+  items           Item[]
+  createdAt       DateTime @default(now())
 }
 
-// 2. إعداد الاتصال بقاعدة البيانات (يقرأ القيم من Vercel Environment Variables)
-datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
-}
-
-// 3. جدول الشركات (نظام الـ ERP الأساسي)
-model Company {
-  id        String   @id @default(uuid()) // مفتاح أساسي فريد لكل شركة
-  name      String   // اسم الشركة
-  createdAt DateTime @default(now()) // تاريخ إنشاء الشركة
-  users     User[]   // علاقة: الشركة الواحدة لها عدة مستخدمين
-}
-
-// 4. جدول المستخدمين
-model User {
-  id        String   @id @default(uuid()) // مفتاح أساسي فريد للمستخدم
-  email     String   @unique // البريد الإلكتروني (يجب أن يكون فريداً)
-  password  String   // كلمة السر (تذكر تشفيرها قبل الحفظ)
-  companyId String?  // الحقل الذي يربط المستخدم بالشركة
-  
-  // ربط المستخدم بالشركة
-  company   Company? @relation(fields: [companyId], references: [id])
+model Item {
+  id          String   @id @default(uuid())
+  product_id  String
+  quantity    Int
+  unit_price  Float
+  purchaseId  String
+  purchase    Purchase @relation(fields: [purchaseId], references: [id])
 }
