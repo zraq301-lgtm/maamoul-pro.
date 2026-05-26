@@ -1,8 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createClient } from './utils/supabase/client.js';
-// أضف هذا السطر لضمان استمرارية الجلسة في أندرويد
-import { App } from '@capacitor/app'; 
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -18,24 +16,26 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     
-    // استخدام persistSession في Supabase لضمان الحفظ في الـ Capacitor storage
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    setLoading(false);
+      if (error) throw error;
 
-    if (error) {
-      setError(error.message);
-    } else {
-      // بعد تسجيل الدخول، نتأكد من التوجيه
+      // عند نجاح العملية، ننتقل فوراً للمسار الرئيسي
+      // استخدام { replace: true } يمنع المستخدم من العودة لصفحة الدخول بالضغط على زر الرجوع
       navigate('/', { replace: true });
+      
+    } catch (err) {
+      setError(err.message || 'حدث خطأ أثناء تسجيل الدخول');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    // الكود كما هو، مع التأكد أن النموذج يرسل البيانات بشكل صحيح
     <div className="flex flex-col gap-4 p-8 max-w-md mx-auto mt-10 shadow-lg rounded-lg border border-gray-200 bg-white">
       <h1 className="text-2xl font-bold text-center text-gray-800">تسجيل الدخول</h1>
       
@@ -67,7 +67,7 @@ export default function LoginPage() {
             loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
           }`}
         >
-          {loading ? 'جاري الدخول...' : 'دخول'}
+          {loading ? 'جاري التحقق...' : 'دخول'}
         </button>
       </form>
     </div>
