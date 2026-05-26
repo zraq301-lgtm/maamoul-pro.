@@ -1,22 +1,34 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import path from 'path' // تم إضافة هذا للتحكم في المسارات
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import path from 'path';
 
-// https://vitejs.dev/config/
 export default defineConfig({
+  // استخدام ./ يضمن أن التطبيق يبحث عن ملفاته في المسار الحالي داخل الـ WebView
+  base: './', 
+  
   plugins: [
     react(),
     tailwindcss(),
   ],
+  
   resolve: {
     alias: {
-      // هذا السطر يخبر Vite أن أي مسار يبدأ بـ @/ يجب أن يبحث عنه في مجلد src
       '@': path.resolve(__dirname, './src'),
     },
   },
+  
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
-  }
-})
+    emptyOutDir: true, // يضمن مسح المجلد قبل كل بناء جديد
+    rollupOptions: {
+      output: {
+        // منع التخزين المؤقت للملفات (Cache Busting)
+        // هذا يضمن أن المتصفح/التطبيق سيحمل التعديلات الجديدة دائماً
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+      },
+    },
+  },
+});
