@@ -4,11 +4,8 @@ import Swal from 'sweetalert2';
 // استيراد أداة الاتصال الأصلية للهواتف الذكية من كاباسيتور
 import { CapacitorHttp } from '@capacitor/core';
 
-// استيراد الروابط والمحرك الموحد من المسار المطلوب
-import apiService, { apiEndpoints } from './services/db';
-
-// استيراد دالة تشغيل الاتصال الخارجي من المسار المطلوب
-import { executeExternalConnection } from './services/db';
+// --- ضبط وتوحيد مسارات خدمات قاعدة البيانات والسيرفر الخارجي لمنع أخطاء Vite ---
+import apiService, { apiEndpoints, executeExternalConnection } from './services/db.js';
 
 // استيراد المكونات المتوافقة مع ملفات النظام الفعلي لنظام Maamoul
 import Dashboard from './components/Dashboard';
@@ -31,7 +28,7 @@ const showSwal = (title, icon = 'success') => {
   Swal.fire({ title, icon, timer: 1800, showConfirmButton: false, position: 'center', toast: true });
 };
 
-// مصفوفة الموديولات لإدارة التخزين المحلي والربط المتكامل - تم إضافة الموديولات الناقصة لضمان شمولية الحفظ
+// مصفوفة الموديولات لإدارة التخزين المحلي والربط المتكامل
 const SYNC_MODULES = [
   { key: 'stock', module: 'inventory_module' },
   { key: 'salesData', module: 'sales_module' },
@@ -81,7 +78,9 @@ const App = () => {
 
   // دالة موحدة للحفظ المحلي الآمن لحماية البيانات من الاستبدال الفارغ
   const saveLocally = useCallback((key, data) => {
-    localStorage.setItem(key, JSON.stringify(data));
+    if (data !== undefined && data !== null) {
+      localStorage.setItem(key, JSON.stringify(data));
+    }
   }, []);
 
   // 1. 📥 محرك جلب البيانات السحابي الآمن والمنظم
@@ -147,18 +146,7 @@ const App = () => {
     const runBackgroundSyncToMaamoul = async () => {
       setIsSyncing(true);
       try {
-        const liveDataMap = {
-          stock,
-          salesData,
-          inventory,
-          productionData,
-          expenses,
-          customers,
-          suppliers,
-          staff,
-          waste,
-          cashBook
-        };
+        const liveDataMap = { stock, salesData, inventory, productionData, expenses, customers, suppliers, staff, waste, cashBook };
 
         for (const item of SYNC_MODULES) {
           const currentLiveData = liveDataMap[item.key];
